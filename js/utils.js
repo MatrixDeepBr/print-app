@@ -1,7 +1,7 @@
 /*
   Arquivo: js/utils.js
-  Versão: 1.0.0
-  Sessão: 1 — Base do projeto
+  Versão: 1.1.0
+  Sessão: 2 — Cadastro, login e pendente (planoEfetivo olha o vencimento do Pro)
   Data: 14/10/2026
   Funções pequenas usadas em todo o app. Não depende do Firebase.
 
@@ -77,20 +77,21 @@ export function hojeISO(d = new Date()) {
 }
 
 /**
- * Plano que vale agora para o usuário (documento de users):
- *  - plano "pro"                          -> "pro"
- *  - plano "teste_pro" com proAte no futuro -> "pro"
- *  - qualquer outro caso                  -> "free"
+ * Plano que vale agora para o usuário (documento de users). Decisão do Maestro, S2:
+ *  - plano "pro" ou "teste_pro" com proAte preenchido:
+ *        proAte no futuro -> "pro" · proAte já passou -> "free"
+ *  - plano "pro" sem proAte (nulo)  -> "pro" (parceiro, sem vencimento)
+ *  - plano "teste_pro" sem proAte   -> "free"
+ *  - qualquer outro caso            -> "free"
  * Para saber se é teste, olhe usuario.plano === 'teste_pro'.
  */
 export function planoEfetivo(usuario) {
   if (!usuario) return 'free';
-  if (usuario.plano === 'pro') return 'pro';
-  if (usuario.plano === 'teste_pro') {
-    const ate = paraData(usuario.proAte);
-    if (ate && ate.getTime() > Date.now()) return 'pro';
-  }
-  return 'free';
+  const plano = usuario.plano;
+  if (plano !== 'pro' && plano !== 'teste_pro') return 'free';
+  const ate = paraData(usuario.proAte);
+  if (ate) return ate.getTime() > Date.now() ? 'pro' : 'free';
+  return plano === 'pro' ? 'pro' : 'free';
 }
 
 /** Erro do Firebase -> frase em português simples. */
@@ -98,6 +99,7 @@ export function traduzErro(e) {
   const c = String(e?.code || '').replace(/^firestore\//, '');
   const msg = {
     'auth/invalid-credential': 'E-mail ou senha incorretos.',
+    'auth/invalid-login-credentials': 'E-mail ou senha incorretos.',
     'auth/wrong-password': 'E-mail ou senha incorretos.',
     'auth/user-not-found': 'E-mail ou senha incorretos.',
     'auth/invalid-email': 'E-mail inválido. Confira se digitou certo.',

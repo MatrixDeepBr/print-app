@@ -1,7 +1,7 @@
 /*
   Arquivo: style.css
-  Versão: 1.0.0
-  Sessão: 1 — Base do projeto
+  Versão: 1.1.0
+  Sessão: 2 — Cadastro, login e pendente
   Data: 14/10/2026
   Visual do Print, copiado do protótipo (prototipo-orcamento-pintor.html).
   Regras da casa: sem CSS por ID, sem !important, alvos de toque com pelo menos 48 px.
@@ -412,9 +412,136 @@ textarea {
 }
 .diag-item.ok .diag-sinal { background: var(--ok-soft); color: var(--ok); }
 .diag-item.falha .diag-sinal { background: var(--erro-soft); color: var(--erro); }
-.diag-item b { display: block; }
+.diag-item > div > b { display: block; } /* S2: só o título; o <b> do detalhe (ex.: "ativo") fica na linha */
 .diag-det { font-size: 13px; color: var(--muted); word-break: break-word; }
 .codigo { font-family: ui-monospace, Consolas, monospace; font-size: 13px; background: var(--soft); padding: 2px 6px; border-radius: 6px; word-break: break-all; }
 
 /* ---------- 6. Diversos ---------- */
 .aviso-noscript { padding: 16px; text-align: center; }
+a { color: var(--brand); }
+.pequeno { font-size: 13px; }
+
+/* ---------- 7. Sem menu (sem login ou conta não liberada) — Sessão 2 ---------- */
+:root.sem-menu { --nav-h: 0px; --side-w: 0px; }
+.sem-menu .menu { display: none; }
+@media (min-width: 900px) {
+  .sem-menu .topo { display: flex; }
+  .sem-menu .conteudo { margin-left: 0; }
+}
+
+/* Botão que parece link (Pular) */
+.link-btn {
+  min-height: var(--toque);
+  min-width: var(--toque);
+  padding: 0 12px;
+  border: 0;
+  background: none;
+  color: var(--brand);
+  font-weight: 650;
+}
+
+/* ---------- 8. Boas-vindas ---------- */
+.bv { display: flex; flex-direction: column; min-height: calc(100vh - var(--topo-h) - 60px); min-height: calc(100dvh - var(--topo-h) - 60px); }
+.bv-topo { display: flex; align-items: center; gap: 10px; min-height: var(--toque); margin-bottom: 8px; }
+.bv-nome { font-weight: 700; font-size: 15px; }
+.bv-topo .link-btn { margin-left: auto; }
+.bv-cartao {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 18px;
+  padding: 28px 22px;
+  margin: 10px 0 18px;
+  border-radius: 20px;
+  background: var(--soft);
+  border: 1.5px solid var(--line);
+  min-height: 300px;
+}
+.bv-ic { font-size: 48px; line-height: 1; }
+.bv-txt { font-size: 21px; line-height: 1.4; font-weight: 650; margin: 0; }
+.bv-dots { margin: 0 auto 18px; }
+
+/* ---------- 9. Entrar e cadastro ---------- */
+.auth-marca { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 15px; margin: 6px 0 14px; }
+.auth-alt { margin-top: 26px; padding-top: 18px; border-top: 1px solid var(--line); text-align: center; }
+.auth-alt .muted { display: block; margin-bottom: 8px; }
+.auth-alt .big { justify-content: center; }
+.senha-campo { position: relative; }
+.senha-campo input { padding-right: 104px; }
+.senha-ver {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  bottom: 1px;
+  min-width: 92px;
+  border: 0;
+  border-left: 1.5px solid var(--line);
+  border-radius: 0 11px 11px 0;
+  background: var(--soft);
+  color: var(--brand);
+  font-size: 14px;
+  font-weight: 650;
+}
+.aviso-dados {
+  margin: 18px 0 4px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--soft);
+  font-size: 14px;
+  line-height: 1.45;
+}
+.aceite {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-height: var(--toque);
+  margin: 10px 0 0;
+  padding: 10px 0;
+  font-weight: 500;
+  font-size: 15px;
+  cursor: pointer;
+}
+.aceite input { width: 26px; height: 26px; min-height: 26px; margin: 0; flex: none; accent-color: var(--brand); }
+.links-termos { display: flex; gap: 8px; flex-wrap: wrap; margin: 4px 0 6px 38px; }
+.links-termos a {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--toque);
+  padding: 0 14px;
+  border: 1.5px solid var(--line);
+  border-radius: 24px;
+  background: var(--soft);
+  font-size: 14px;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+/* ---------- 10. Situação da conta (pendente, recusado, bloqueado) ---------- */
+.status-topo { text-align: center; padding: 18px 0 8px; }
+.status-ic { display: block; font-size: 46px; line-height: 1; margin-bottom: 8px; }
+.card.destaque { border-color: var(--brand); background: var(--soft); }
+.card.destaque p:first-child { font-weight: 650; font-size: 17px; }
+.card.resumo p { font-size: 15px; }
+.ok-card { border-color: var(--ok); background: var(--ok-soft); }
+.ok-card b { display: block; font-size: 18px; margin-bottom: 6px; color: var(--ok); }
+
+/* ---------- 11. Falar com a equipe ---------- */
+.rotulo { font-weight: 600; font-size: 14px; margin: 18px 0 0; }
+.seg.tres button { font-size: 15px; padding: 0 4px; }
+.contador { text-align: right; }
+
+/* ---------- 12. Termos, privacidade e sobre ---------- */
+.texto-legal h2 { font-size: 16px; margin-top: 20px; }
+.texto-legal p { line-height: 1.55; }
+.rascunho {
+  display: inline-block;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--erro-soft);
+  color: var(--erro);
+  font-weight: 700;
+  font-size: 13px;
+}
+.rodape-legal { margin-top: 28px; text-align: center; font-size: 14px; color: var(--muted); }
+.rodape-legal a { display: inline-flex; align-items: center; min-height: var(--toque); padding: 0 6px; }

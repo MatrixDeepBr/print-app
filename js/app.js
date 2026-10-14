@@ -1,9 +1,11 @@
 /*
   Arquivo: js/app.js
-  Versão: 1.0.0
-  Sessão: 1 — Base do projeto
+  Versão: 2.0.0
+  Sessão: 2 — Cadastro, login e pendente
   Data: 14/10/2026
   Coração do app: estado global, roteador, toast, menu e tema.
+  Sessão 2: telas reais de boas-vindas, entrar, cadastro, recuperar senha,
+  situação da conta (pendente, recusado, bloqueado), contato e termos.
 
   Contrato de telas: cada tela é um módulo que exporta
     montar(container, ctx)   desenha a tela dentro de container
@@ -12,9 +14,20 @@
   Extras no ctx: params (os params passados no ir), recarregarUsuario()
 
   Estado global: usuario (documento de users), uid, ehAdmin, planoEfetivo, perfil
+  Extra (S2): erroUsuario (erro ao ler/criar o documento do usuário, ou null)
 
-  Rotas: #inicio #clientes #orcamento #historico #perfil #master
-         #diagnostico (TEMPORÁRIA, só da Sessão 1 — remover na Sessão 2 ou 10)
+  Rotas do app (só para status "ativo"): #inicio #clientes #orcamento #historico #perfil #master
+  Rotas sem login:          #boasvindas #entrar #cadastro #recuperar
+  Situação da conta:        #pendente #recusado #bloqueado (+ #problema, extra da S2)
+  Para qualquer logado:     #contato
+  Livres (sempre abrem):    #termos (#termos/privacidade, #termos/sobre), #diagnostico (TEMPORÁRIA)
+
+  Quem vai para onde (o roteador decide sozinho):
+    sem login            -> boas-vindas na primeira vez, depois Entrar
+    logado, sem cadastro -> #problema (Tentar de novo / Sair)
+    pendente/recusado/bloqueado -> a tela da situação (e #contato)
+    ativo                -> o app, com o menu inferior/lateral
+  O menu só aparece para usuário ativo.
 
   Para ligar a tela real de uma sessão futura, troque o "carregar" dela em TELAS,
   por exemplo:  clientes: { ..., carregar: () => import('./clientes.js') }
@@ -23,6 +36,9 @@
 import { app, auth, db, fs, fa, modoCache, VERSAO_FIREBASE } from './firebase.js';
 import * as utils from './utils.js';
 import { iniciarUso, pararUso, gravarUsoAgora } from './uso.js';
+import { jaViuBoasVindas } from './boasvindas.js';
+import { garantirDocumento, sair, telaEntrar, telaCadastro, telaRecuperar } from './auth.js';
+import { rodapeLegal } from './textos.js';
 
 const { esc } = utils;
 const $ = s => document.querySelector(s);
@@ -35,7 +51,8 @@ export const estado = {
   uid: null,
   ehAdmin: false,
   planoEfetivo: 'free', // 'free' ou 'pro' (ver utils.planoEfetivo)
-  perfil: {}            // usuario.perfil (ou {})
+  perfil: {},           // usuario.perfil (ou {})
+  erroUsuario: null     // S2: erro ao carregar/criar users/{uid}
 };
 
 /* ============================================================
@@ -51,7 +68,7 @@ export function toast(msg, tipo = '') {
   if (tipo) el.classList.add(tipo);
   el.classList.add('on');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove('on'), tipo === 'erro' ? 4000 : 2400);
+  toastTimer = setTimeout(() => el.classList.remove('on'), tipo === 'erro' ? 4500 : 2400);
 }
 
 /* ============================================================
@@ -68,18 +85,57 @@ function provisoria(titulo, nota) {
   };
 }
 
+/**
+ * Perfil PROVISÓRIO (a Sessão 4 faz o perfil real).
+ * A Sessão 4 deve manter: botão Falar com a equipe, botão Sair e o rodapé
+ * com Termos, Privacidade e Sobre (rodapeLegal() de textos.js).
+ */
+const perfilProvisorio = {
+  montar(el, ctx) {
+    const u = estado.usuario || {};
+    el.innerHTML =
+      '<h1>Perfil</h1>' +
+      '<p class="muted">Tela provisória. O perfil completo chega na Sessão 4.</p>' +
+      '<div class="card"><b>' + esc(u.nome || 'Sem nome') + '</b>' +
+      '<p class="muted">' + esc(u.email || auth.currentUser?.email || '') + '</p></div>' +
+      '<button class="big js-contato" type="button">💬 Falar com a equipe</button>' +
+      '<button class="big js-sair" type="button">↩️ Sair</button>' +
+      rodapeLegal();
+    el.querySelector('.js-contato').addEventListener('click', () => ctx.ir('contato', { de: 'perfil' }));
+    const b = el.querySelector('.js-sair');
+    b.addEventListener('click', async () => { b.disabled = true; await sair(ctx); b.disabled = false; });
+  }
+};
+
 /*
-  protegida: só abre para usuário com status "ativo"
-  admin:     só abre para quem está em admins/{uid}
+  protegida:   só abre para usuário com status "ativo"
+  admin:       só abre para quem está em admins/{uid}
+  soDeslogado: só abre sem login (boas-vindas, entrar, cadastro, recuperar)
+  situacao:    tela da situação da conta (pendente, recusado, bloqueado, problema)
+  logado:      abre para qualquer usuário logado com cadastro (contato)
+  livre:       abre sempre (termos, diagnóstico)
 */
 const TELAS = {
   inicio:      { titulo: 'Início',    protegida: true, carregar: async () => provisoria('Início', 'Tela provisória. A tela inicial chega na Sessão 5.') },
   clientes:    { titulo: 'Clientes',  protegida: true, carregar: async () => provisoria('Clientes', 'Tela provisória. Chega na Sessão 5.') },
   orcamento:   { titulo: 'Orçamento', protegida: true, carregar: async () => provisoria('Novo orçamento', 'Tela provisória. Chega na Sessão 6.') },
   historico:   { titulo: 'Histórico', protegida: true, carregar: async () => provisoria('Histórico', 'Tela provisória. Chega na Sessão 6.') },
-  perfil:      { titulo: 'Perfil',    protegida: true, carregar: async () => provisoria('Perfil', 'Tela provisória. Chega na Sessão 4.') },
+  perfil:      { titulo: 'Perfil',    protegida: true, carregar: async () => perfilProvisorio },
   master:      { titulo: 'Master',    protegida: true, admin: true, carregar: async () => provisoria('Painel master', 'Tela provisória. Chega na Sessão 3.') },
-  diagnostico: { titulo: 'Diagnóstico', carregar: async () => telaDiagnostico } // TEMPORÁRIA
+
+  boasvindas:  { titulo: 'Boas-vindas',     soDeslogado: true, carregar: () => import('./boasvindas.js') },
+  entrar:      { titulo: 'Entrar',          soDeslogado: true, carregar: async () => telaEntrar },
+  cadastro:    { titulo: 'Criar conta',     soDeslogado: true, carregar: async () => telaCadastro },
+  recuperar:   { titulo: 'Recuperar senha', soDeslogado: true, carregar: async () => telaRecuperar },
+
+  pendente:    { titulo: 'Aguardando liberação', situacao: true, carregar: async () => (await import('./status.js')).telaPendente },
+  recusado:    { titulo: 'Cadastro não aprovado', situacao: true, carregar: async () => (await import('./status.js')).telaRecusado },
+  bloqueado:   { titulo: 'Acesso bloqueado',      situacao: true, carregar: async () => (await import('./status.js')).telaBloqueado },
+  problema:    { titulo: 'Sua conta',             situacao: true, carregar: async () => (await import('./status.js')).telaProblema },
+
+  contato:     { titulo: 'Falar com a equipe', logado: true, carregar: () => import('./contato.js') },
+  termos:      { titulo: 'Termos e privacidade', livre: true, carregar: () => import('./textos.js') },
+  diagnostico: { titulo: 'Diagnóstico', livre: true, carregar: async () => telaDiagnostico } // TEMPORÁRIA
 };
 
 const MENU = [
@@ -91,30 +147,40 @@ const MENU = [
   { tela: 'master',    ic: '🛡️', txt: 'Master', admin: true }
 ];
 
-/** Confere se a tela pode abrir. Devolve uma tela de bloqueio ou null. */
+/**
+ * Situação de quem está usando o app agora:
+ * 'deslogado', 'problema' (logado sem cadastro carregado), 'pendente',
+ * 'recusado', 'bloqueado' ou 'ativo'.
+ */
+function situacao() {
+  if (!estado.uid) return 'deslogado';
+  if (!estado.usuario) return 'problema';
+  const s = estado.usuario.status;
+  if (s === 'ativo' || s === 'recusado' || s === 'bloqueado') return s;
+  return 'pendente'; // pendente ou qualquer valor estranho
+}
+
+/** Para qual tela a pessoa vai, dada a tela pedida e a situação dela. */
+function destinoPara(nome) {
+  const def = TELAS[nome];
+  if (def.livre) return nome;
+  const s = situacao();
+  if (s === 'deslogado') {
+    if (def.soDeslogado) return nome;
+    return jaViuBoasVindas() ? 'entrar' : 'boasvindas';
+  }
+  if (s === 'problema') return 'problema';
+  if (s !== 'ativo') {
+    if (def.logado) return nome;   // contato
+    return s;                      // pendente, recusado ou bloqueado
+  }
+  // ativo
+  if (def.soDeslogado || def.situacao) return 'inicio';
+  return nome;
+}
+
+/** Bloqueio que sobra depois do destino: área do administrador. */
 function bloqueioDe(def) {
-  if (!def.protegida) return null;
-  if (!estado.uid) {
-    return {
-      montar(el) {
-        // Provisório: na Sessão 2 isto vira a tela de login.
-        el.innerHTML = '<h1>Entre na sua conta</h1>' +
-          '<p class="muted">O login definitivo chega na Sessão 2. Por enquanto, use a tela de diagnóstico.</p>' +
-          '<a class="big primary" href="#diagnostico">Abrir diagnóstico</a>';
-      }
-    };
-  }
-  if (estado.usuario?.status !== 'ativo') {
-    return {
-      montar(el) {
-        // Provisório: na Sessão 2 isto vira a tela "Aguardando liberação".
-        const st = estado.usuario?.status || 'sem cadastro';
-        el.innerHTML = '<h1>Aguardando liberação</h1>' +
-          '<p class="muted">Situação da conta: <b>' + esc(st) + '</b>. A tela definitiva chega na Sessão 2.</p>' +
-          '<a class="big" href="#diagnostico">Abrir diagnóstico</a>';
-      }
-    };
-  }
   if (def.admin && !estado.ehAdmin) {
     return provisoria('Área restrita', 'Esta área é só do administrador.');
   }
@@ -148,7 +214,12 @@ function criarCtx(params = {}) {
 }
 
 async function mostrar() {
-  const nome = telaDoEndereco();
+  const pedida = telaDoEndereco();
+  const nome = destinoPara(pedida);
+  if (nome !== pedida) {
+    // Troca o endereço sem criar um passo a mais no botão Voltar.
+    history.replaceState(null, '', '#' + nome);
+  }
   const params = pedido && pedido.tela === nome ? pedido.params : {};
   pedido = null;
   const minha = ++geracao;
@@ -169,6 +240,7 @@ async function mostrar() {
   }
   if (minha !== geracao) return; // o usuário já foi para outra tela
 
+  mostrarMenu(situacao() === 'ativo');
   const conteudo = $('.js-conteudo');
   const el = document.createElement('section');
   el.className = 'tela';
@@ -188,15 +260,24 @@ async function mostrar() {
 
 /* ============================================================
    5. Menu (inferior no celular, lateral no computador)
+   Só aparece para usuário ativo.
    ============================================================ */
+function mostrarMenu(sim) {
+  document.documentElement.classList.toggle('sem-menu', !sim);
+  const nav = $('.menu');
+  if (nav) nav.hidden = !sim;
+}
+
 function montarMenu() {
   const box = $('.js-menu');
   if (!box) return;
+  if (situacao() !== 'ativo') { box.innerHTML = ''; mostrarMenu(false); return; }
   box.innerHTML = MENU
     .filter(m => !m.admin || estado.ehAdmin)
     .map(m => '<a class="menu-item" href="#' + m.tela + '" data-tela="' + m.tela + '">' +
       '<span class="ic" aria-hidden="true">' + m.ic + '</span><span>' + esc(m.txt) + '</span></a>')
     .join('');
+  mostrarMenu(true);
   if (telaAtual) marcarMenu(telaAtual.nome);
 }
 
@@ -244,17 +325,33 @@ function trocarTema() {
 async function carregarUsuario(user) {
   if (!user) {
     await pararUso();
-    Object.assign(estado, { usuario: null, uid: null, ehAdmin: false, planoEfetivo: 'free', perfil: {} });
+    Object.assign(estado, { usuario: null, uid: null, ehAdmin: false, planoEfetivo: 'free', perfil: {}, erroUsuario: null });
     return;
   }
   estado.uid = user.uid;
+  estado.erroUsuario = null;
   const [u, a] = await Promise.allSettled([
     fs.getDoc(fs.doc(db, 'users', user.uid)),
     fs.getDoc(fs.doc(db, 'admins', user.uid))
   ]);
-  estado.usuario = u.status === 'fulfilled' && u.value.exists() ? u.value.data() : null;
   estado.ehAdmin = a.status === 'fulfilled' && a.value.exists();
-  if (u.status === 'rejected') console.warn('[Print] leitura de users', u.reason);
+
+  if (u.status === 'rejected') {
+    console.warn('[Print] leitura de users', u.reason);
+    estado.usuario = null;
+    estado.erroUsuario = u.reason;
+  } else if (u.value.exists()) {
+    estado.usuario = u.value.data();
+  } else {
+    // Conta existe no Authentication, mas o documento não: cria agora (pendente).
+    try {
+      estado.usuario = await garantirDocumento(user);
+    } catch (e) {
+      console.warn('[Print] criar documento do usuário', e);
+      estado.usuario = null;
+      estado.erroUsuario = e;
+    }
+  }
   estado.planoEfetivo = utils.planoEfetivo(estado.usuario);
   estado.perfil = estado.usuario?.perfil || {};
 
@@ -264,7 +361,12 @@ async function carregarUsuario(user) {
 
 /** Relê o documento do usuário (ex.: depois de salvar o perfil). */
 export async function recarregarUsuario() {
-  await carregarUsuario(auth.currentUser);
+  try {
+    await carregarUsuario(auth.currentUser);
+  } catch (e) {
+    console.error('[Print] recarregar usuário', e);
+    toast(utils.traduzErro(e), 'erro');
+  }
   montarMenu();
 }
 
