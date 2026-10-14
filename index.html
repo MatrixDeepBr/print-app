@@ -1,0 +1,67 @@
+<!doctype html>
+<!--
+  Arquivo: index.html
+  Versão: 1.0.0
+  Sessão: 1 — Base do projeto
+  Data: 14/10/2026
+  Página única do Print. Carrega o visual (style.css) e o app (js/app.js como módulo).
+-->
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#2447d6">
+<meta name="apple-mobile-web-app-title" content="Print">
+<title>Print — Orçamentos e Gestão</title>
+<link rel="stylesheet" href="./style.css">
+<script>
+  // Aplica o tema salvo antes de desenhar a página, para não piscar.
+  try {
+    var t = localStorage.getItem('print.tema');
+    if (t === 'claro') document.documentElement.setAttribute('data-theme', 'light');
+    if (t === 'escuro') document.documentElement.setAttribute('data-theme', 'dark');
+  } catch (e) {}
+</script>
+<script type="module" src="./js/app.js"></script>
+</head>
+<body>
+<div class="shell">
+  <header class="topo">
+    <div class="marca">
+      <span class="marca-logo" aria-hidden="true">P</span>
+      <span class="marca-nome">Print</span>
+    </div>
+    <button class="icone-btn js-tema" type="button" aria-label="Trocar tema">🌓</button>
+  </header>
+
+  <nav class="menu" aria-label="Menu principal">
+    <div class="menu-marca">
+      <span class="marca-logo" aria-hidden="true">P</span>
+      <span>
+        <b>Print</b>
+        <small>Orçamentos e Gestão</small>
+      </span>
+    </div>
+    <div class="menu-itens js-menu"></div>
+    <button class="menu-tema js-tema" type="button">
+      <span aria-hidden="true">🌓</span><span class="js-tema-txt">Tema automático</span>
+    </button>
+  </nav>
+
+  <main class="conteudo js-conteudo" tabindex="-1">
+    <section class="tela carregando">
+      <span class="marca-logo grande" aria-hidden="true">P</span>
+      <h1>Print — Orçamentos e Gestão</h1>
+      <p class="muted">Carregando…</p>
+    </section>
+  </main>
+</div>
+
+<div class="toast js-toast" role="status" aria-live="polite"></div>
+
+<noscript>
+  <p class="aviso-noscript">O Print precisa do JavaScript ligado no navegador.</p>
+</noscript>
+</body>
+</html>
