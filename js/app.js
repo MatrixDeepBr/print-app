@@ -1,8 +1,15 @@
 /*
   Arquivo: js/app.js
-  Versão: 2.2.0
-  Sessão: Maestro (preparação das Sessões 4, 5 e 6 em paralelo)
+  Versão: 2.3.0
+  Sessão: 4B — Cadastro e conta (Google, WhatsApp único, várias profissões)
   Data: 15/10/2026
+  2.3.0 (só o caminho de Complete seu cadastro):
+         rota #completar (telaCompletar de auth.js) e situação 'completar':
+         logado sem users/{uid} (1º acesso com Google ou cadastro que não terminou),
+         ou pendente antigo sem WhatsApp. Não cria mais documento pela metade:
+         garantirDocumento devolve null e o app abre Complete seu cadastro.
+         estado.semCadastro (novo). Telas Entrar, Criar conta e Completar
+         carregam css/cadastro.css. O resto do arquivo é igual à 2.2.0.
   2.2.0: TELAS já apontam para perfil.js, inicio.js, clientes.js, orcamento.js
          e historico.js (se o arquivo ainda não existir, mostra a tela provisória);
          cada tela pode ter CSS próprio em css/{nome}.css (campo "css" em TELAS);
@@ -42,7 +49,7 @@ import { auth, db, fs, fa } from './firebase.js';
 import * as utils from './utils.js';
 import { iniciarUso, pararUso } from './uso.js';
 import { jaViuBoasVindas } from './boasvindas.js';
-import { garantirDocumento, sair, telaEntrar, telaCadastro, telaRecuperar } from './auth.js';
+import { garantirDocumento, sair, telaEntrar, telaCadastro, telaRecuperar, telaCompletar } from './auth.js'; // 2.3.0: + telaCompletar
 import { rodapeLegal } from './textos.js';
 
 const { esc } = utils;
@@ -57,7 +64,8 @@ export const estado = {
   ehAdmin: false,
   planoEfetivo: 'free', // 'free' ou 'pro' (ver utils.planoEfetivo)
   perfil: {},           // usuario.perfil (ou {})
-  erroUsuario: null     // S2: erro ao carregar/criar users/{uid}
+  erroUsuario: null,    // S2: erro ao carregar/criar users/{uid}
+  semCadastro: false    // 2.3.0: logado, mas users/{uid} não existe no servidor (falta Complete seu cadastro)
 };
 
 /* ============================================================
@@ -185,14 +193,15 @@ const TELAS = {
   master:      { titulo: 'Painel master', protegida: true, admin: true, carregar: () => import('./master.js') },
 
   boasvindas:  { titulo: 'Boas-vindas',     soDeslogado: true, carregar: () => import('./boasvindas.js') },
-  entrar:      { titulo: 'Entrar',          soDeslogado: true, carregar: async () => telaEntrar },
-  cadastro:    { titulo: 'Criar conta',     soDeslogado: true, carregar: async () => telaCadastro },
+  entrar:      { titulo: 'Entrar',          soDeslogado: true, css: 'cadastro', carregar: async () => telaEntrar },     // 2.3.0: + css
+  cadastro:    { titulo: 'Criar conta',     soDeslogado: true, css: 'cadastro', carregar: async () => telaCadastro },   // 2.3.0: + css
   recuperar:   { titulo: 'Recuperar senha', soDeslogado: true, carregar: async () => telaRecuperar },
 
   pendente:    { titulo: 'Aguardando liberação', situacao: true, carregar: async () => (await import('./status.js')).telaPendente },
   recusado:    { titulo: 'Cadastro não aprovado', situacao: true, carregar: async () => (await import('./status.js')).telaRecusado },
   bloqueado:   { titulo: 'Acesso bloqueado',      situacao: true, carregar: async () => (await import('./status.js')).telaBloqueado },
   problema:    { titulo: 'Sua conta',             situacao: true, carregar: async () => (await import('./status.js')).telaProblema },
+  completar:   { titulo: 'Complete seu cadastro', situacao: true, css: 'cadastro', carregar: async () => telaCompletar }, // 2.3.0
 
   contato:     { titulo: 'Falar com a equipe', logado: true, carregar: () => import('./contato.js') },
   termos:      { titulo: 'Termos e privacidade', livre: true, carregar: () => import('./textos.js') }
@@ -214,8 +223,10 @@ const MENU = [
  */
 function situacao() {
   if (!estado.uid) return 'deslogado';
-  if (!estado.usuario) return 'problema';
+  if (!estado.usuario) return estado.semCadastro ? 'completar' : 'problema'; // 2.3.0
   const s = estado.usuario.status;
+  // 2.3.0: pendente antigo sem WhatsApp (documento criado pela metade) completa o cadastro
+  if (!estado.ehAdmin && (s || 'pendente') === 'pendente' && !estado.usuario.whatsapp) return 'completar';
   if (s === 'ativo' || s === 'recusado' || s === 'bloqueado') return s;
   return 'pendente'; // pendente ou qualquer valor estranho
 }
@@ -230,6 +241,7 @@ function destinoPara(nome) {
     return jaViuBoasVindas() ? 'entrar' : 'boasvindas';
   }
   if (s === 'problema') return 'problema';
+  if (s === 'completar') return def.logado ? nome : 'completar'; // 2.3.0 (Falar com a equipe continua aberto)
   if (s !== 'ativo') {
     if (def.logado) return nome;   // contato
     return s;                      // pendente, recusado ou bloqueado
@@ -385,12 +397,13 @@ function trocarTema() {
 async function carregarUsuario(user) {
   if (!user) {
     await pararUso();
-    Object.assign(estado, { usuario: null, uid: null, ehAdmin: false, planoEfetivo: 'free', perfil: {}, erroUsuario: null });
+    Object.assign(estado, { usuario: null, uid: null, ehAdmin: false, planoEfetivo: 'free', perfil: {}, erroUsuario: null, semCadastro: false });
     atualizarTopo(); // 2.2.0
     return;
   }
   estado.uid = user.uid;
   estado.erroUsuario = null;
+  estado.semCadastro = false; // 2.3.0
   const [u, a] = await Promise.allSettled([
     fs.getDoc(fs.doc(db, 'users', user.uid)),
     fs.getDoc(fs.doc(db, 'admins', user.uid))
@@ -404,13 +417,17 @@ async function carregarUsuario(user) {
   } else if (u.value.exists()) {
     estado.usuario = u.value.data();
   } else {
-    // Conta existe no Authentication, mas o documento não: cria agora (pendente).
+    // 2.3.0: conta existe no Authentication, mas o documento não.
+    // Se há um cadastro por e-mail em andamento, ele é criado agora (users + telefones).
+    // Sem dados (1º acesso com Google ou cadastro que não terminou): Complete seu cadastro.
     try {
       estado.usuario = await garantirDocumento(user);
+      if (!estado.usuario) estado.semCadastro = true;
     } catch (e) {
       console.warn('[Print] criar documento do usuário', e);
       estado.usuario = null;
-      estado.erroUsuario = e;
+      if (e?.code === 'print/whats-repetido') estado.semCadastro = true; // WhatsApp já usado: troca o número no Completar
+      else estado.erroUsuario = e;
     }
   }
   estado.planoEfetivo = utils.planoEfetivo(estado.usuario);
@@ -430,6 +447,8 @@ export async function recarregarUsuario() {
     toast(utils.traduzErro(e), 'erro');
   }
   montarMenu();
+  // 2.3.0: "Tentar de novo" da tela de problema descobriu que falta completar o cadastro.
+  if (situacao() === 'completar' && telaAtual?.nome === 'problema') mostrar();
 }
 
 /* ============================================================

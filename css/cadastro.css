@@ -1,0 +1,59 @@
+/*
+  Arquivo: css/cadastro.css
+  Versão: 1.0.0
+  Sessão: 4B — Cadastro e conta (Google, WhatsApp único, várias profissões)
+  Data: 15/10/2026
+  Estilos das telas Entrar, Criar conta e Complete seu cadastro (auth.js 2.0.0).
+  Carregado pelo app.js 2.3.0. Usa os tokens do style.css. Classes .auth- e .cad-.
+  Sem CSS por ID e sem !important.
+*/
+
+/* Botão Entrar com Google */
+.auth-google { justify-content: center; margin-top: 14px; }
+.auth-g {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: #fff;
+  flex: none;
+}
+.auth-dica { text-align: center; margin: 0 0 6px; }
+
+/* Divisor "ou crie com e-mail" */
+.auth-ou {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 22px 0 6px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.auth-ou::before, .auth-ou::after { content: ""; flex: 1; border-top: 1px solid var(--line); }
+.auth-alt .auth-ou { margin-top: 0; }
+.auth-alt form, .auth-alt label { text-align: left; }
+
+/* Profissões: marca e desmarca */
+.cad-prof { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 6px; }
+.cad-prof button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--toque);
+  padding: 0 14px;
+  border: 1.5px solid var(--line);
+  border-radius: 24px;
+  background: var(--soft);
+  font-size: 15px;
+  font-weight: 600;
+  text-align: left;
+}
+.cad-prof button.on { background: var(--brand); border-color: var(--brand); color: var(--onbrand); }
+
+/* Complete seu cadastro */
+.cad-conta { margin: 4px 0 10px; overflow-wrap: anywhere; }
+.cad-alerta { border-color: #d14343; }
+.cad-alerta > b { display: block; margin-bottom: 4px; }

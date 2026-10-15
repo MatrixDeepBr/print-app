@@ -1,8 +1,12 @@
 /*
   Arquivo: js/textos.js
-  Versão: 1.1.0
-  Sessão: 3 — Painel master (dados da empresa lidos de config/empresa)
-  Data: 14/10/2026
+  Versão: 1.2.0
+  Sessão: 4B — Cadastro e conta (1.1.0 era da Sessão 3)
+  Data: 15/10/2026
+  1.2.0: Termos item 4 (entrar com Google ou e-mail, profissões, uma conta por
+         WhatsApp); Privacidade item 2 (com Google, o app usa só o nome e o e-mail
+         da conta, sem foto) e item 5 (o aparelho lembra quais contas entraram).
+         VERSAO_TERMOS passou para 2026-10-15-rascunho.
   Termos de uso, Política de Privacidade e Sobre (RASCUNHO).
   Os dados da empresa (nome, CNPJ, endereço, responsável pelos dados, e-mail e
   telefone) vêm de config/empresa, preenchido no painel master (aba Empresa).
@@ -20,7 +24,7 @@ import { db, fs } from './firebase.js';
 import { esc } from './utils.js';
 
 /** Mude esta versão sempre que o texto dos Termos ou da Política mudar. */
-export const VERSAO_TERMOS = '2026-10-14-rascunho';
+export const VERSAO_TERMOS = '2026-10-15-rascunho';
 
 const AVISO = '<p class="rascunho">RASCUNHO — revisar com contador ou advogado</p>';
 
@@ -69,8 +73,9 @@ function montarTextos() {
       '<p>O Free continua grátis, e nada que hoje faz parte dele será retirado.</p>' +
       '<p>Quem entra agora ganha 2 meses de Pro quando ele abrir. Depois do período grátis, o Pro terá um valor. Avisamos com pelo menos 30 dias de antecedência, antes de qualquer cobrança. Ninguém passa a pagar sem concordar.</p>' +
       '<h2>4. Sua conta</h2>' +
-      '<p>Para usar o app, você cria uma conta com nome, WhatsApp, cidade, e-mail e senha. A liberação do acesso é feita pela equipe.</p>' +
-      '<p>Guarde a sua senha e não a passe para ninguém. Você é responsável pelo que for feito na sua conta.</p>' +
+      '<p>Para usar o app, você entra com a sua conta Google ou com e-mail e senha, e informa nome, WhatsApp, cidade e profissões. A liberação do acesso é feita pela equipe.</p>' +
+      '<p>Cada pessoa tem uma conta só, e cada WhatsApp só pode ser usado em uma conta.</p>' +
+      '<p>Guarde o acesso à sua conta e não o passe para ninguém. Você é responsável pelo que for feito na sua conta.</p>' +
       '<p>A equipe pode recusar um cadastro ou bloquear uma conta usada de forma abusiva, ilegal ou que prejudique o app ou outras pessoas.</p>' +
       '<h2>5. Seus dados são seus</h2>' +
       '<p>Os seus clientes, orçamentos e demais informações que você cadastra pertencem a você. Você pode pedir uma cópia deles ou a exclusão a qualquer momento.</p>' +
@@ -97,7 +102,8 @@ function montarTextos() {
       '<p>' + RESPONSAVEL + ', ' + CNPJ + ', ' + ENDERECO + '.</p>' +
       '<p>Encarregado de dados (LGPD): ' + ENCARREGADO + ', pelo e-mail ' + CONTATO_EMAIL + '.</p>' +
       '<h2>2. Dados da sua conta</h2>' +
-      '<p>Nome, WhatsApp, cidade, e-mail, código de parceiro (se você informar), data do cadastro e data do aceite destes termos.</p>' +
+      '<p>Nome, WhatsApp, cidade, profissões, e-mail, código de parceiro (se você informar), data do cadastro e data do aceite destes termos.</p>' +
+      '<p>Se você entrar com a conta Google, o app usa só o nome e o e-mail dessa conta. Não usa a foto nem outros dados do Google.</p>' +
       '<p><b>Para quê:</b> criar e manter a sua conta, liberar o acesso e falar com você quando precisar.</p>' +
       '<p><b>Base legal:</b> execução do contrato de uso do app (LGPD, art. 7º, V).</p>' +
       '<h2>3. Dados de uso</h2>' +
@@ -110,7 +116,7 @@ function montarTextos() {
       '<p>Nós só guardamos esses dados para o app funcionar. A equipe não consulta nem usa esses dados, e eles nunca são vendidos ou passados para outras empresas.</p>' +
       '<h2>5. Onde ficam os dados</h2>' +
       '<p>Os dados ficam guardados no Google Firebase, com acesso protegido por senha e por regras que separam a conta de cada pessoa. A senha é guardada pelo próprio sistema de login do Google, e nem a equipe tem acesso a ela.</p>' +
-      '<p>No seu aparelho, o app lembra só o e-mail do último login e as suas preferências de tela.</p>' +
+      '<p>No seu aparelho, o app lembra só o e-mail do último login, as suas preferências de tela e quais contas já entraram nele (para evitar contas repetidas).</p>' +
       '<h2>6. Por quanto tempo</h2>' +
       '<p>Enquanto a sua conta existir. Se você pedir a exclusão, apagamos os dados em até 30 dias, menos o que a lei mandar guardar.</p>' +
       '<h2>7. Seus direitos</h2>' +

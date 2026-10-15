@@ -1,8 +1,10 @@
 /*
   Arquivo: css/perfil.css
-  Versão: 1.0.0
-  Sessão: 4 — Perfil e configurações
+  Versão: 1.1.0
+  Sessão: 4B — Várias profissões (1.0.0 era da Sessão 4)
   Data: 15/10/2026
+  1.1.0: .pf-modal com grid-auto-flow dense e .pf-op-largo (Marido de aluguel
+         ocupa a linha inteira, com ícone e texto lado a lado).
   Estilos só da tela Perfil (classes .pf-). Carregado pelo app.js 2.2.0.
   Usa os tokens do style.css. Sem CSS por ID e sem !important.
 */
@@ -53,8 +55,8 @@
 .pf-corpo { padding: 2px 16px 16px; }
 .pf-corpo > .rotulo:first-child { margin-top: 12px; }
 
-/* ---------- Modalidade ---------- */
-.pf-modal { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 8px 0 4px; }
+/* ---------- Profissões (1.1.0: várias) ---------- */
+.pf-modal { display: grid; grid-template-columns: repeat(3, 1fr); grid-auto-flow: dense; gap: 8px; margin: 8px 0 4px; }
 .pf-op {
   display: flex;
   flex-direction: column;
@@ -71,6 +73,8 @@
 }
 .pf-op span { font-size: 22px; line-height: 1; }
 .pf-op.on { border-color: var(--brand); background: var(--soft); color: var(--brand); }
+.pf-op.pf-op-largo { grid-column: 1 / -1; flex-direction: row; gap: 10px; min-height: 52px; }
+.pf-op.pf-op-largo span { font-size: 20px; }
 
 /* ---------- Logo ---------- */
 .pf-logo-box { display: flex; gap: 14px; align-items: flex-start; margin: 8px 0 4px; }

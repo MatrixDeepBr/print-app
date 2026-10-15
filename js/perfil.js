@@ -1,8 +1,13 @@
 /*
   Arquivo: js/perfil.js
-  Versão: 1.0.0
-  Sessão: 4 — Perfil e configurações
+  Versão: 1.1.0
+  Sessão: 4B — Várias profissões (1.0.0 era da Sessão 4)
   Data: 15/10/2026
+  1.1.0: a Modalidade (escolha única) virou Profissões (marca e desmarca, pelo
+         menos 1), com a opção nova "Marido de aluguel / reparos gerais".
+         Grava especialidades (lista) e especialidade (a primeira marcada, para
+         quem já lê esse campo). O cabeçalho mostra "Pintor · Pedreiro".
+         Usuário antigo sem a lista: lerEspecialidades() de auth.js.
 
   Tela Perfil (#perfil): dados que vão no PDF (empresa, modalidade, CPF/CNPJ,
   telefone, cidade, logo, PIX, cor, modelo de PDF, validade, condições e rodapé)
@@ -15,7 +20,7 @@
       a conta ainda não tem guiaFeito e o perfil está vazio (para quem abre
       #perfil direto). No fim, ou ao pular tudo, grava perfil.guiaFeito = true.
 
-  Grava em users/{uid}: especialidade (raiz) e perfil.* (updateDoc com
+  Grava em users/{uid}: especialidades e especialidade (raiz) e perfil.* (updateDoc com
   caminhos "perfil.campo"; nunca reescreve o documento inteiro).
   Offline: não espera o servidor; avisa "Salvo no aparelho…" sem internet.
 
@@ -25,20 +30,13 @@
 */
 
 import { db, fs } from './firebase.js';
-import { sair } from './auth.js';
+import { sair, PROFISSOES, lerEspecialidades, nomesProfissoes } from './auth.js'; // 1.1.0: + profissões
 import { rodapeLegal } from './textos.js';
 
 /* ============================================================
    1. Constantes
    ============================================================ */
-const MODALIDADES = [
-  ['pintor', '🎨', 'Pintor'],
-  ['pedreiro', '🧱', 'Pedreiro'],
-  ['encanador', '🔧', 'Encanador'],
-  ['eletricista', '💡', 'Eletricista'],
-  ['gesseiro', '🏛️', 'Gesseiro'],
-  ['outro', '🛠️', 'Outro']
-];
+/* 1.1.0: a lista de profissões fica em auth.js (PROFISSOES), a mesma do cadastro e do painel. */
 
 const COR_PADRAO = '#2447d6'; // o azul do app
 const CORES = [
@@ -64,12 +62,12 @@ const LOGO_ALVO = 50 * 1024;   // ~50 KB (tamanho do texto gravado)
 const LOGO_LIMITE = 80 * 1024; // passou disso, avisa e não usa
 
 /* Campos editáveis (o "rascunho" da tela). */
-const CAMPOS = ['especialidade', 'empresa', 'documento', 'telefone', 'cidade', 'logo',
+const CAMPOS = ['especialidades', 'empresa', 'documento', 'telefone', 'cidade', 'logo',
   'corPrincipal', 'pix', 'modeloPdf', 'validadeDias', 'condicoes', 'rodape'];
 
 /* Campos de cada passo da guia. */
 const PASSOS = [
-  { campos: ['empresa', 'especialidade'] },
+  { campos: ['empresa', 'especialidades'] },
   { campos: ['logo'] },
   { campos: ['telefone', 'pix'] }
 ];
@@ -214,9 +212,8 @@ let guardado = null;       // rascunho guardado quando a pessoa desiste de sair 
 function valoresDe(estado) {
   const u = estado.usuario || {};
   const p = estado.perfil || {};
-  const esp = MODALIDADES.some(m => m[0] === u.especialidade) ? u.especialidade : 'pintor';
   return {
-    especialidade: esp,
+    especialidades: lerEspecialidades(u), // 1.1.0
     empresa: p.empresa ?? '',
     documento: p.documento ?? '',
     telefone: soDigitos(p.telefone ?? u.whatsapp ?? ''),
@@ -326,14 +323,23 @@ function desenhar() {
 /* ============================================================
    5. Pedaços de HTML (usados nos dois modos)
    ============================================================ */
+/* 1.1.0: botões que marcam e desmarcam (pelo menos 1). */
 function htmlModalidades(esc) {
-  const r = sessao.rascunho;
-  return '<div class="pf-modal" role="radiogroup" aria-label="Modalidade">' +
-    MODALIDADES.map(([k, ic, n]) =>
-      '<button type="button" role="radio" class="pf-op' + (r.especialidade === k ? ' on' : '') + '" ' +
-      'aria-checked="' + (r.especialidade === k) + '" data-esp="' + k + '">' +
-      '<span aria-hidden="true">' + ic + '</span>' + esc(n) + '</button>').join('') +
+  const sel = sessao.rascunho.especialidades;
+  return '<div class="pf-modal" role="group" aria-label="Profissões">' +
+    PROFISSOES.map(([k, ic, n]) => {
+      const on = sel.includes(k);
+      return '<button type="button" class="pf-op' + (on ? ' on' : '') + (k === 'reparos' ? ' pf-op-largo' : '') + '" ' +
+        'aria-pressed="' + on + '" data-esp="' + k + '">' +
+        '<span aria-hidden="true">' + ic + '</span>' + esc(n) + '</button>';
+    }).join('') +
     '</div>';
+}
+
+/** "🎨 Pintor · Pedreiro" (ícone da principal). */
+function textoProfissoes(lista) {
+  const p = PROFISSOES.find(x => x[0] === lista[0]) || PROFISSOES[0];
+  return p[1] + ' ' + nomesProfissoes(lista);
 }
 
 function htmlLogo(esc) {
@@ -390,7 +396,7 @@ function desenharGuia() {
     ['Contato e PIX', 'Para o cliente falar com você e pagar.']
   ];
   let corpo = '';
-  if (n === 0) corpo = htmlEmpresa(esc) + '<p class="rotulo">Você trabalha como</p>' + htmlModalidades(esc);
+  if (n === 0) corpo = htmlEmpresa(esc) + '<p class="rotulo">Você trabalha como <span class="muted">(pode marcar mais de uma)</span></p>' + htmlModalidades(esc);
   if (n === 1) corpo = htmlLogo(esc);
   if (n === 2) corpo = htmlTelefone(esc) + htmlPix(esc);
 
@@ -457,7 +463,6 @@ function desenharNormal() {
   const r = sessao.rascunho;
   const u = ctx.estado.usuario || {};
   const email = u.email || ctx.auth.currentUser?.email || '';
-  const mod = MODALIDADES.find(m => m[0] === r.especialidade) || MODALIDADES[0];
   const plano = ctx.estado.planoEfetivo === 'pro' ? 'Pro' : 'Free';
   const tema = lerTema();
   const corLivre = !CORES.some(c => c[0] === r.corPrincipal);
@@ -470,7 +475,7 @@ function desenharNormal() {
       '</div>' +
       '<div class="pf-cab-txt"><b>' + esc(r.empresa || u.nome || 'Seu perfil') + '</b>' +
         '<span class="muted">' + esc(email) + '</span>' +
-        '<span class="pf-cab-mod">' + mod[1] + ' ' + esc(mod[2]) + '</span></div>' +
+        '<span class="pf-cab-mod">' + esc(textoProfissoes(r.especialidades)) + '</span></div>' +
     '</div>' +
 
     // Minha empresa
@@ -479,7 +484,7 @@ function desenharNormal() {
       '<div class="pf-corpo">' +
         '<p class="rotulo">Logo</p>' + htmlLogo(esc) +
         htmlEmpresa(esc) +
-        '<p class="rotulo">Modalidade</p>' + htmlModalidades(esc) +
+        '<p class="rotulo">Profissões <span class="muted">(pode marcar mais de uma)</span></p>' + htmlModalidades(esc) +
         campoTexto('pf-doc', 'CPF ou CNPJ (opcional)', formatarDocumento(r.documento),
           'data-campo="documento" inputmode="numeric" placeholder="000.000.000-00"', esc) +
         htmlTelefone(esc) +
@@ -640,16 +645,21 @@ function ligarCampos(el) {
     });
   });
 
+  // 1.1.0: marca e desmarca; a primeira marcada é a principal; nunca fica vazia.
   el.querySelectorAll('[data-esp]').forEach(b => b.addEventListener('click', () => {
-    s.rascunho.especialidade = b.dataset.esp;
-    el.querySelectorAll('[data-esp]').forEach(x => {
-      const on = x === b;
-      x.classList.toggle('on', on);
-      x.setAttribute('aria-checked', String(on));
-    });
-    const mod = MODALIDADES.find(m => m[0] === b.dataset.esp);
+    const k = b.dataset.esp;
+    const lista = s.rascunho.especialidades;
+    if (lista.includes(k)) {
+      if (lista.length === 1) { s.ctx.toast('Deixe pelo menos uma profissão marcada.', 'erro'); return; }
+      s.rascunho.especialidades = lista.filter(x => x !== k);
+    } else {
+      s.rascunho.especialidades = [...lista, k];
+    }
+    const on = s.rascunho.especialidades.includes(k);
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-pressed', String(on));
     const cab = el.querySelector('.pf-cab-mod');
-    if (cab && mod) cab.textContent = mod[1] + ' ' + mod[2];
+    if (cab) cab.textContent = textoProfissoes(s.rascunho.especialidades);
     atualizarBotao();
   }));
 
@@ -695,6 +705,10 @@ function marcarErro(campo, msg) {
 
 function validar(campos) {
   const r = sessao.rascunho;
+  if (campos.includes('especialidades') && !r.especialidades.length) { // 1.1.0
+    sessao.ctx.toast('Marque pelo menos uma profissão.', 'erro');
+    return false;
+  }
   if (campos.includes('telefone')) {
     const n = soDigitos(r.telefone).length;
     if (n && n !== 10 && n !== 11) return marcarErro('telefone', 'Telefone com DDD: 10 ou 11 números.');
@@ -712,6 +726,7 @@ function validar(campos) {
 
 /** Valor limpo de cada campo para gravar. */
 function valorParaGravar(k, v) {
+  if (k === 'especialidades') { const l = lerEspecialidades({ especialidades: v }); return l; } // 1.1.0
   if (k === 'telefone') return soDigitos(v);
   if (k === 'validadeDias') return Number.isInteger(v) ? v : 15;
   if (k === 'logo') return logoValida(v) ? v : '';
@@ -734,7 +749,7 @@ function salvar(campos, guiaFeito, silencioso) {
   const novoPerfil = {};
   campos.forEach(k => {
     const v = valorParaGravar(k, s.rascunho[k]);
-    if (k === 'especialidade') dados.especialidade = v;
+    if (k === 'especialidades') { dados.especialidades = v; dados.especialidade = v[0]; } // 1.1.0: + a principal
     else { dados['perfil.' + k] = v; novoPerfil[k] = v; }
     s.rascunho[k] = v;
   });
@@ -748,7 +763,10 @@ function salvar(campos, guiaFeito, silencioso) {
   ctx.estado.perfil = { ...(ctx.estado.perfil || {}), ...novoPerfil };
   if (ctx.estado.usuario) {
     ctx.estado.usuario.perfil = ctx.estado.perfil;
-    if (dados.especialidade) ctx.estado.usuario.especialidade = dados.especialidade;
+    if (dados.especialidades) { // 1.1.0
+      ctx.estado.usuario.especialidades = dados.especialidades;
+      ctx.estado.usuario.especialidade = dados.especialidade;
+    }
   }
 
   const promessa = fs.updateDoc(fs.doc(db, 'users', ctx.estado.uid), dados);

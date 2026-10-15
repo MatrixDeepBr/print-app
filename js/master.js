@@ -1,8 +1,12 @@
 /*
   Arquivo: js/master.js
-  Versão: 1.1.0
-  Sessão: 3B — Liberação automática com espera (1.0.0 era da Sessão 3)
+  Versão: 1.2.0
+  Sessão: 4B — Cadastro e conta (1.1.0 era da 3B, 1.0.0 da Sessão 3)
   Data: 15/10/2026
+  1.2.0: profissões na lista e na ficha (⋯ Ações), filtro por profissão;
+         selo "⚠️ Possível conta repetida" e filtro (contaRepetidaAparelho);
+         na ficha, "Liberar este WhatsApp" (apaga telefones/{numero}, exige
+         digitar LIBERAR) e o jeito de entrar (Google ou e-mail).
   Painel do dono (só para quem está em admins/{uid}). Pensado para o celular, com uma mão.
 
   Abas:
@@ -16,7 +20,7 @@
               diasTesteProPadrao e "Ativar teste Pro para todos"
 
   O painel lê SÓ: users, resumos, uso (collectionGroup 'dias'), pedidosContato,
-  masterNotas e config. Nunca lê as subcoleções de users (clientes, orçamentos).
+  masterNotas, config e telefones/{numero} (1.2.0, só ao abrir Liberar este WhatsApp). Nunca lê as subcoleções de users (clientes, orçamentos).
 
   Contrato: montar(container, ctx), desmontar()
   Extra:    CRITERIOS (constantes do relatório, fáceis de mudar)
@@ -25,6 +29,7 @@
     users/{uid}:        status, liberadoEm, testeProPendente, liberadoPor ('manual'), plano, proAte
     masterNotas/{uid}:  notas, tags, ultimoContato, parceiro, codigo, atualizadoEm
     pedidosContato/{id}: status
+    telefones/{numero}: apaga (Liberar este WhatsApp, 1.2.0)
     config/app:         mensagemPendente, diasTesteProPadrao,
                         liberacaoAutomatica, autoMinutosMin, autoMinutosMax (1.1.0)
     config/empresa:     nome, cnpj, endereco, responsavelDados, email, telefone, atualizadoEm
@@ -32,7 +37,7 @@
 */
 
 import { db, fs } from './firebase.js';
-import { formatarWhats } from './auth.js';
+import { formatarWhats, PROFISSOES, lerEspecialidades, nomesProfissoes } from './auth.js'; // 1.2.0: + profissões
 import { segundosDaVez, lerMinutos } from './status.js'; // 1.1.0: mesmo sorteio do aparelho do pintor
 
 /* ============================================================
@@ -86,6 +91,7 @@ function novoEstado(el, ctx) {
     prontos: { users: false, notas: false, pedidos: false },
     erroLista: null,
     filtro: 'todos',
+    filtroProf: 'todas',  // 1.2.0
     busca: '',
     filtroPedidos: 'novo',
     uso: null,            // resultado do relatório
@@ -340,8 +346,13 @@ function desenharAba() {
       '<label class="mt-oculto" for="mt-busca">Buscar por nome</label>' +
       '<input id="mt-busca" class="js-busca" type="search" placeholder="🔍 Buscar por nome, cidade ou WhatsApp" autocomplete="off" value="' + esc(S.busca) + '">' +
       '<div class="qk mt-filtros" role="group" aria-label="Filtrar por status">' +
-        [['todos', 'Todos'], ['hoje', 'Liberados hoje'], ['ativo', 'Ativos'], ['pendente', 'Pendentes'], ['bloqueado', 'Bloqueados'], ['recusado', 'Recusados']]
+        [['todos', 'Todos'], ['hoje', 'Liberados hoje'], ['ativo', 'Ativos'], ['pendente', 'Pendentes'], ['bloqueado', 'Bloqueados'], ['recusado', 'Recusados'], ['repetida', '⚠️ Possível conta repetida']]
           .map(([k, n]) => '<button type="button" data-filtro="' + k + '" class="' + (S.filtro === k ? 'on' : '') + '" aria-pressed="' + (S.filtro === k) + '">' + n + '</button>').join('') +
+      '</div>' +
+      // 1.2.0: filtro por profissão
+      '<div class="qk mt-filtros" role="group" aria-label="Filtrar por profissão">' +
+        [['todas', '🧑‍🔧', 'Todas as profissões'], ...PROFISSOES.map(p => [p[0], p[1], p[3]])]
+          .map(([k, ic, n]) => '<button type="button" data-fprof="' + k + '" class="' + (S.filtroProf === k ? 'on' : '') + '" aria-pressed="' + (S.filtroProf === k) + '">' + ic + ' ' + esc(n) + '</button>').join('') +
       '</div>' +
       '<div class="js-lista"></div>';
   } else if (S.aba === 'pedidos') {
@@ -398,7 +409,7 @@ function atualizarUsuarios() {
 
   // Pendentes no topo (os mais antigos primeiro: quem espera há mais tempo)
   const pendentes = todos.filter(u => (u.status || 'pendente') === 'pendente').sort((a, b) => -porData(a, b));
-  const mostrarPend = S.filtro === 'todos' && !S.busca.trim();
+  const mostrarPend = S.filtro === 'todos' && S.filtroProf === 'todas' && !S.busca.trim(); // 1.2.0: + profissão
   pend.innerHTML = mostrarPend
     ? '<h2>Pendentes' + (pendentes.length ? ' (' + pendentes.length + ')' : '') + '</h2>' +
       (pendentes.length
@@ -414,7 +425,9 @@ function atualizarUsuarios() {
     const st = u.status || 'pendente';
     if (S.filtro === 'todos') { if (mostrarPend && st === 'pendente') return false; }
     else if (S.filtro === 'hoje') { if (!u.liberadoEm || U().dataBR(u.liberadoEm) !== hoje) return false; } // 1.1.0
+    else if (S.filtro === 'repetida') { if (u.contaRepetidaAparelho !== true) return false; }              // 1.2.0
     else if (st !== S.filtro) return false;
+    if (S.filtroProf !== 'todas' && !lerEspecialidades(u).includes(S.filtroProf)) return false;           // 1.2.0
     if (!termo) return true;
     return normalizar(u.nome).includes(termo) || normalizar(u.cidade).includes(termo) ||
       normalizar(u.email).includes(termo) || (digitos.length >= 3 && soDigitos(u.whatsapp).includes(digitos));
@@ -423,7 +436,10 @@ function atualizarUsuarios() {
     : porData);
 
   const dicaHoje = S.filtro === 'hoje'
-    ? '<p class="campo-ajuda">Confira quem entrou hoje. Se não for profissional, toque em ⋯ Ações e em Bloquear acesso.</p>' : '';
+    ? '<p class="campo-ajuda">Confira quem entrou hoje. Se não for profissional, toque em ⋯ Ações e em Bloquear acesso.</p>'
+    : S.filtro === 'repetida'
+      ? '<p class="campo-ajuda">Contas criadas num aparelho onde outra conta já tinha entrado. Pode ser a mesma pessoa com outro WhatsApp, ou alguém que usou o celular de outra pessoa para se cadastrar. Essas contas não entram sozinhas: você decide.</p>'
+      : '';
   lista.innerHTML = dicaHoje + (lista2.length
     ? '<p class="muted pequeno">' + lista2.length + (lista2.length === 1 ? ' usuário' : ' usuários') + '</p>' + lista2.map(cartaoUsuario).join('')
     : '<div class="card mt-vazio">' + (S.filtro === 'hoje' ? 'Ninguém foi liberado hoje.' : 'Ninguém encontrado.') + '</div>');
@@ -436,9 +452,22 @@ function seloLiberacao(u) {
   return '';
 }
 
+/* 1.2.0: aviso de possível conta repetida (marca do aparelho). */
+function seloRepetida(u) {
+  return u.contaRepetidaAparelho === true ? '<span class="selo st-bloqueado">⚠️ Possível conta repetida</span>' : '';
+}
+
+/* 1.2.0: "🎨 Pintor · Marido de aluguel" */
+function linhaProfissoes(u) {
+  const lista = lerEspecialidades(u);
+  const p = PROFISSOES.find(x => x[0] === lista[0]) || PROFISSOES[0];
+  return p[1] + ' ' + esc(nomesProfissoes(lista, true));
+}
+
 /* 1.1.0: com a chave ligada, quando o pendente entra sozinho. */
 function linhaAuto(u) {
   if (S.config?.liberacaoAutomatica !== true) return '';
+  if (u.contaRepetidaAparelho === true) return '<br>⚠️ Não entra sozinho (possível conta repetida): libere ou recuse.'; // 1.2.0
   const criado = U().paraData(u.criadoEm);
   if (!criado) return '';
   const { min, max } = lerMinutos(S.config);
@@ -471,8 +500,8 @@ function cartaoUsuario(u) {
   return '<article class="card mu">' +
     '<div class="mu-cab"><b>' + esc(u.nome || 'Sem nome') + (voce ? ' <span class="muted">(você)</span>' : '') + '</b>' +
       seloStatus(st) + '</div>' +
-    '<div class="mu-selos">' + seloPlano(u) + seloLiberacao(u) + seloParceiro(u.uid) + '</div>' +
-    '<p class="mu-info">' + linhaZap + (u.cidade ? ' · ' + esc(u.cidade) : '') + '<br>' +
+    '<div class="mu-selos">' + seloPlano(u) + seloLiberacao(u) + seloParceiro(u.uid) + seloRepetida(u) + '</div>' +
+    '<p class="mu-info">' + linhaProfissoes(u) + '<br>' + linhaZap + (u.cidade ? ' · ' + esc(u.cidade) : '') + '<br>' +
       'Cadastro: ' + esc(U().dataBR(u.criadoEm) || '—') + indicacao +
       (st !== 'pendente' && u.liberadoEm ? '<br>Liberado: ' + esc(dataHora(u.liberadoEm)) : '') +
       (st === 'pendente' ? linhaAuto(u) : '') + '</p>' +
@@ -969,7 +998,12 @@ function abrirAcoes(uid) {
     const bloquear = st === 'ativo' && !voce ? '<button type="button" class="big mt-btn-contorno" data-f="bloquear">🔒 Bloquear acesso</button>' : '';
     const temPro = u.plano === 'pro' || u.plano === 'teste_pro';
     return '<h2 class="folha-tit">' + esc(u.nome || 'Sem nome') + '</h2>' +
-      '<div class="mu-selos">' + seloStatus(st) + seloPlano(u) + seloLiberacao(u) + seloParceiro(uid) + '</div>' +
+      '<div class="mu-selos">' + seloStatus(st) + seloPlano(u) + seloLiberacao(u) + seloParceiro(uid) + seloRepetida(u) + '</div>' +
+      // 1.2.0: profissões, WhatsApp e jeito de entrar
+      '<p class="mu-info">' + linhaProfissoes(u) + '<br>' +
+        (u.whatsapp ? '📱 ' + esc(formatarWhats(u.whatsapp)) : '📱 sem WhatsApp') +
+        (u.entrada === 'google' ? ' · entrou com Google' : u.entrada === 'email' ? ' · entrou com e-mail' : '') +
+        (u.email ? '<br>✉️ ' + esc(u.email) : '') + '</p>' +
       status +
       '<p class="rotulo">Plano</p>' +
       '<div class="seg tres" role="group" aria-label="Plano">' +
@@ -984,6 +1018,7 @@ function abrirAcoes(uid) {
           '</div>'
         : '<p class="campo-ajuda">Para estender o Pro, mude antes o plano para Teste Pro ou Pro.</p>') +
       '<button type="button" class="big" data-f="notas" style="margin-top:14px">📝 Notas e parceria</button>' +
+      (u.whatsapp ? '<button type="button" class="big" data-f="liberar-whats">📱 Liberar este WhatsApp</button>' : '') + // 1.2.0
       bloquear +
       '<button type="button" class="big" data-fechar>Fechar</button>';
   };
@@ -993,6 +1028,7 @@ function abrirAcoes(uid) {
     if (!b || b.disabled) return;
     const f = b.dataset.f;
     if (f === 'notas') { abrirNotas(uid); return; }
+    if (f === 'liberar-whats') { abrirLiberarWhats(uid); return; } // 1.2.0
     if (f === 'recusar') { pedirRecusa(uid); return; }
     if (f === 'bloquear') {
       confirmar('Bloquear ' + nomeDe(uid) + '?', 'A pessoa deixa de entrar no app até você reativar. Os dados dela ficam guardados.', 'Bloquear',
@@ -1006,6 +1042,55 @@ function abrirAcoes(uid) {
     else if (f === 'estender') await estenderPro(uid, b.dataset.dias === 'sem' ? 'sem' : +b.dataset.dias);
     b.disabled = false;
   }, { tipo: 'acoes', uid, desenhar });
+}
+
+/* ============================================================
+   6.1 Liberar este WhatsApp (1.2.0): apaga telefones/{numero}
+   Para quando a pessoa perdeu a conta ou trocou de número.
+   ============================================================ */
+async function abrirLiberarWhats(uid) {
+  const u = S.users.get(uid) || {};
+  const numero = soDigitos(u.whatsapp);
+  if (numero.length < 10) { toast('Esta conta não tem WhatsApp.', 'erro'); return; }
+  const ov = abrirFolha(
+    '<h2 class="folha-tit">📱 Liberar este WhatsApp</h2>' +
+    '<p><b>' + esc(formatarWhats(numero)) + '</b> · ' + esc(u.nome || 'Sem nome') + '</p>' +
+    '<p class="muted js-lw-info">Conferindo o número…</p>' +
+    '<button type="button" class="big" data-fechar>Cancelar</button>');
+  const meu = S.folha;
+  let info = '';
+  let existe = false;
+  try {
+    const s = await fs.getDoc(fs.doc(db, 'telefones', numero));
+    existe = s.exists();
+    const dono = existe ? s.data().uid : null;
+    if (!existe) info = 'Este número não está registrado (conta antiga, de antes da Sessão 4B, ou já foi liberado). Não há nada para liberar.';
+    else if (dono === uid) info = 'O número está registrado nesta conta. Liberando, ele pode ser usado num cadastro novo (a pessoa perdeu a conta ou trocou de número). Esta conta continua igual.';
+    else info = '⚠️ O número está registrado em OUTRA conta: ' + (S.users.get(dono)?.nome || 'conta sem cadastro') + '. Liberando, ele pode ser usado num cadastro novo.';
+  } catch (e) {
+    info = 'Não deu para conferir: ' + U().traduzErro(e);
+  }
+  if (!S || S.folha !== meu) return;
+  const sheet = ov.querySelector('.sheet');
+  sheet.innerHTML =
+    '<h2 class="folha-tit">📱 Liberar este WhatsApp</h2>' +
+    '<p><b>' + esc(formatarWhats(numero)) + '</b> · ' + esc(u.nome || 'Sem nome') + '</p>' +
+    '<p>' + esc(info) + '</p>' +
+    (existe
+      ? '<label for="lw-txt">Para confirmar, digite LIBERAR</label>' +
+        '<input id="lw-txt" class="js-conf" autocomplete="off" autocapitalize="characters">' +
+        '<button type="button" class="big mt-btn-perigo" data-f="lw-sim" style="margin-top:14px">Liberar o número</button>'
+      : '') +
+    '<button type="button" class="big" data-fechar>' + (existe ? 'Cancelar' : 'Fechar') + '</button>';
+  ov.addEventListener('click', async ev => {
+    const b = ev.target.closest('[data-f="lw-sim"]');
+    if (!b || b.disabled) return;
+    if (ov.querySelector('.js-conf').value.trim().toUpperCase() !== 'LIBERAR') { toast('Digite LIBERAR para confirmar.', 'erro'); return; }
+    b.disabled = true;
+    b.textContent = 'Liberando…';
+    const ok = await gravar(fs.deleteDoc(fs.doc(db, 'telefones', numero)), 'WhatsApp ' + formatarWhats(numero) + ' liberado ✓');
+    if (ok) fecharFolha(); else { b.disabled = false; b.textContent = 'Liberar o número'; }
+  });
 }
 
 function pedirRecusa(uid) {
@@ -1176,6 +1261,8 @@ function aoClicar(ev) {
   }
   const filtro = ev.target.closest('[data-filtro]');
   if (filtro) { S.filtro = filtro.dataset.filtro; desenharAba(); return; }
+  const fprof = ev.target.closest('[data-fprof]');                              // 1.2.0
+  if (fprof) { S.filtroProf = fprof.dataset.fprof; desenharAba(); return; }
   const fped = ev.target.closest('[data-fped]');
   if (fped) { S.filtroPedidos = fped.dataset.fped; desenharAba(); return; }
 
