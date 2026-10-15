@@ -1,8 +1,11 @@
 /*
   Arquivo: js/status.js
-  Versão: 1.1.0
-  Sessão: 3B — Liberação automática com espera (1.0.0 era da Sessão 2)
+  Versão: 1.2.0
+  Sessão: 10 — Revisão (1.1.0 era da 3B, 1.0.0 da Sessão 2)
   Data: 15/10/2026
+  1.2.0: saiu o formulário antigo "Complete seu cadastro" da tela Pendente
+         (desde a 4B quem não tem WhatsApp vai para a tela Complete seu cadastro
+         do auth.js, e as regras recusavam mudar o WhatsApp por ali).
   Telas da situação da conta: Aguardando liberação, Recusado, Bloqueado,
   e "Não deu para abrir sua conta" (quando o documento do usuário não carrega).
   Sem login, não mostram nada (o app.js leva para Entrar).
@@ -23,7 +26,7 @@
 */
 
 import { db, fs } from './firebase.js';
-import { sair, formatarWhats } from './auth.js';
+import { sair } from './auth.js'; // 1.2.0: formatarWhats saiu (era do formulário antigo)
 
 const MSG_PADRAO = 'Recebemos seu cadastro. Em breve a equipe libera seu acesso.';
 const MSG_AUTO = 'Seu cadastro está em análise. Normalmente leva poucos minutos.';
@@ -116,7 +119,6 @@ export const telaPendente = {
     if (semLogin(el, ctx)) return;
     const { esc, primeiroNome } = ctx.utils;
     const u = ctx.estado.usuario || {};
-    const falta = !u.nome || !u.whatsapp || !u.cidade;
 
     el.innerHTML =
       '<div class="status-topo"><span class="status-ic" aria-hidden="true">⏳</span>' +
@@ -124,7 +126,6 @@ export const telaPendente = {
       '<p class="muted">Cadastro recebido, ' + esc(primeiroNome(u.nome, 'pintor')) + '!</p></div>' +
       '<div class="card destaque"><p class="js-msg">' + esc(MSG_PADRAO) + '</p>' +
       '<p class="muted pequeno js-sub">Quando a equipe liberar, o app abre sozinho.</p></div>' +
-      (falta ? formCompletar(u, esc) : '') +
       '<div class="card resumo">' +
         '<p><span aria-hidden="true">⭐</span> ' + esc(RESUMO_PRO) + '</p>' +
         '<p><span aria-hidden="true">💬</span> ' + esc(RESUMO_EQUIPE) + '</p>' +
@@ -134,7 +135,6 @@ export const telaPendente = {
 
     el.querySelector('.js-contato').addEventListener('click', () => ctx.ir('contato', { de: 'pendente' }));
     ligarSair(el, ctx);
-    if (falta) ligarCompletar(el, ctx);
     vigiarStatus(ctx, 'pendente');
 
     // Mensagem configurada pelo dono em config/app.mensagemPendente
@@ -238,49 +238,6 @@ async function tentarLiberar2(el, ctx, tentativas) {
     auto = { timer: null, tentativas, aoVoltarNet: null };
     auto.timer = setTimeout(() => tentarLiberar(el, ctx), NOVA_TENTATIVA_MS);
   }
-}
-
-/* Se o cadastro ficou incompleto (documento recriado depois de uma falha). */
-function formCompletar(u, esc) {
-  return '<form class="card js-completar" novalidate>' +
-    '<b>Complete seu cadastro</b>' +
-    '<p class="muted pequeno">Assim a equipe consegue falar com você.</p>' +
-    '<label for="p-nome">Seu nome</label>' +
-    '<input id="p-nome" name="nome" autocomplete="name" maxlength="80" value="' + esc(u.nome || '') + '">' +
-    '<label for="p-whats">WhatsApp (com DDD)</label>' +
-    '<input id="p-whats" name="whatsapp" type="tel" inputmode="tel" placeholder="(17) 90000-0000" value="' + esc(formatarWhats(u.whatsapp || '')) + '">' +
-    '<label for="p-cidade">Cidade</label>' +
-    '<input id="p-cidade" name="cidade" maxlength="60" value="' + esc(u.cidade || '') + '">' +
-    '<button class="big primary js-salvar" type="submit" style="margin-top:14px">Salvar</button>' +
-    '</form>';
-}
-
-function ligarCompletar(el, ctx) {
-  const f = el.querySelector('.js-completar');
-  const btn = f.querySelector('.js-salvar');
-  f.whatsapp.addEventListener('input', () => { f.whatsapp.value = formatarWhats(f.whatsapp.value); });
-  f.addEventListener('submit', async ev => {
-    ev.preventDefault();
-    if (btn.disabled) return;
-    const nome = f.nome.value.trim().replace(/\s+/g, ' ');
-    const whatsapp = f.whatsapp.value.replace(/\D/g, '');
-    const cidade = f.cidade.value.trim().replace(/\s+/g, ' ');
-    if (nome.length < 2) { ctx.toast('Digite o seu nome.', 'erro'); f.nome.focus(); return; }
-    if (whatsapp.length < 10 || whatsapp.length > 11) { ctx.toast('Digite o WhatsApp com DDD.', 'erro'); f.whatsapp.focus(); return; }
-    if (cidade.length < 2) { ctx.toast('Digite a sua cidade.', 'erro'); f.cidade.focus(); return; }
-    btn.disabled = true;
-    btn.textContent = 'Salvando…';
-    try {
-      await fs.updateDoc(fs.doc(db, 'users', ctx.estado.uid), { nome, whatsapp, cidade });
-      await ctx.recarregarUsuario();
-      ctx.toast('Dados salvos!', 'ok');
-      telaPendente.montar(el, ctx);
-    } catch (e) {
-      ctx.toast(ctx.utils.traduzErro(e), 'erro');
-      btn.disabled = false;
-      btn.textContent = 'Salvar';
-    }
-  });
 }
 
 /* ============================================================

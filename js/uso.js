@@ -1,8 +1,10 @@
 /*
   Arquivo: js/uso.js
-  Versão: 1.1.0
-  Sessão: 8 — Refinamento do relatório de uso (1.0.0 era da Sessão 1)
+  Versão: 1.1.1
+  Sessão: 10 — Revisão (1.1.0 era da Sessão 8, 1.0.0 da Sessão 1)
   Data: 15/10/2026
+  1.1.1: pararUso() espera no máximo 3 s pelo servidor. Sem internet a gravação
+         fica na fila do aparelho e o "Sair" não trava mais esperando o sinal.
   Coleta de uso do app, desde o primeiro dia.
 
   1.1.0:
@@ -285,7 +287,11 @@ export function registrarEnvio() {
 /** Para a coleta (ao sair da conta). Grava o que faltava antes de parar. */
 export function pararUso() {
   if (!rodando) return Promise.resolve(false);
-  const promessa = gravar().catch(() => false);
+  // 1.1.1: sem internet o setDoc só termina quando o sinal volta; não segura o Sair.
+  const promessa = Promise.race([
+    gravar().catch(() => false),
+    new Promise(ok => setTimeout(() => ok(false), 3000))
+  ]);
   rodando = false;
   EVENTOS_TOQUE.forEach(ev => window.removeEventListener(ev, aoTocar, { capture: true }));
   document.removeEventListener('visibilitychange', aoMudarVisibilidade);

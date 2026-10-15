@@ -1,8 +1,11 @@
 /*
   Arquivo: js/contato.js
-  Versão: 1.0.0
-  Sessão: 2 — Cadastro, login e pendente
-  Data: 14/10/2026
+  Versão: 1.1.0
+  Sessão: 10 — Revisão (1.0.0 era da Sessão 2)
+  Data: 15/10/2026
+  1.1.0: no máximo 5 mensagens por dia (de Brasília) por pessoa neste aparelho
+         (marca no navegador: print.contatoDia = { uid, dia, n }). Nome e
+         WhatsApp do pedido com tamanho limitado (as regras 1.5.0 conferem).
   Formulário "Falar com a equipe". Funciona para usuário pendente e ativo.
   Grava em pedidosContato/{id}: uid, nome, whatsapp, motivo, mensagem,
   status 'novo' e criadoEm. Só o administrador muda o status (regras).
@@ -12,8 +15,24 @@
 */
 
 import { db, fs } from './firebase.js';
+import { diaBrasilia } from './uso.js'; // 1.1.0
 
 const MAX = 2000;
+const MAX_POR_DIA = 5;                 // 1.1.0
+const CHAVE_DIA = 'print.contatoDia';  // 1.1.0
+
+/** 1.1.0: quantas mensagens esta pessoa já mandou hoje neste aparelho. */
+function enviadasHoje(uid) {
+  try {
+    const m = JSON.parse(localStorage.getItem(CHAVE_DIA) || 'null');
+    return m && m.uid === uid && m.dia === diaBrasilia() ? Number(m.n) || 0 : 0;
+  } catch (e) { return 0; }
+}
+function contarEnviada(uid) {
+  try {
+    localStorage.setItem(CHAVE_DIA, JSON.stringify({ uid, dia: diaBrasilia(), n: enviadasHoje(uid) + 1 }));
+  } catch (e) { /* sem armazenamento: não conta */ }
+}
 const MOTIVOS = [
   ['duvida', '❓', 'Dúvida'],
   ['sugestao', '💡', 'Sugestão'],
@@ -87,6 +106,10 @@ export function montar(el, ctx) {
     if (!motivo) { ctx.toast('Escolha: Dúvida, Sugestão ou Benefícios.', 'erro'); el.querySelector('[data-motivo]').focus(); return; }
     if (mensagem.length < 3) { ctx.toast('Escreva a sua mensagem.', 'erro'); f.mensagem.focus(); return; }
     if (!ctx.estado.uid) { ctx.toast('Você precisa entrar na sua conta.', 'erro'); return; }
+    if (enviadasHoje(ctx.estado.uid) >= MAX_POR_DIA) { // 1.1.0
+      ctx.toast('Você já mandou ' + MAX_POR_DIA + ' mensagens hoje. A equipe vai responder; amanhã dá para mandar mais.', 'erro');
+      return;
+    }
 
     enviando = true;
     btn.disabled = true;
@@ -94,8 +117,8 @@ export function montar(el, ctx) {
     try {
       const pedido = {
         uid: ctx.estado.uid,
-        nome: u.nome || '',
-        whatsapp: u.whatsapp || '',
+        nome: String(u.nome || '').slice(0, 120),        // 1.1.0: tamanho limitado (regras 1.5.0)
+        whatsapp: String(u.whatsapp || '').slice(0, 15),
         motivo,
         mensagem,
         status: 'novo',
@@ -103,6 +126,7 @@ export function montar(el, ctx) {
       };
       const r = await comPrazo(fs.addDoc(fs.collection(db, 'pedidosContato'), pedido), 12000);
       rascunho = { motivo: '', mensagem: '' };
+      contarEnviada(ctx.estado.uid); // 1.1.0
       f.hidden = true;
       el.querySelector('.js-ok').hidden = false;
       if (r === 'fila') {

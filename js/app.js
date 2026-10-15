@@ -1,8 +1,18 @@
 /*
   Arquivo: js/app.js
-  Versão: 2.4.0
-  Sessão: 9 — Instalação como app (PWA) e abrir sem internet
+  Versão: 2.5.0
+  Sessão: 10 — Revisão de segurança e correções antes do piloto
   Data: 15/10/2026
+  2.5.0 (seção 10, nova; o resto é igual à 2.4.0):
+         botão Voltar do Android (e do navegador) com folha aberta fecha a folha
+         em vez de trocar de tela: ao abrir uma folha (.ov, ou a folha de cliente
+         no celular) o app guarda um passo no histórico; o Voltar consome esse
+         passo e fecha a folha (mesmo efeito da tecla Esc, que todas as folhas já
+         atendem). No app instalado, Voltar no último passo não fecha o Print de
+         primeira: mostra "Toque de novo para sair". mostrar() mantém o
+         history.state ao corrigir o endereço; ir() com folha aberta troca o
+         passo da folha pela tela nova (sem passo morto no Voltar).
+         Saiu o perfilProvisorio (o perfil real existe desde a Sessão 4).
   2.4.0 (seção 9, nova; o resto é igual à 2.3.0, só mostrar() avisa a seção 9):
          registra o ./sw.js; faixa "Nova versão do Print. Tocar para atualizar"
          (a troca só acontece com o toque); faixa "Instalar o Print" (Android e
@@ -56,8 +66,7 @@ import { auth, db, fs, fa } from './firebase.js';
 import * as utils from './utils.js';
 import { iniciarUso, pararUso } from './uso.js';
 import { jaViuBoasVindas } from './boasvindas.js';
-import { garantirDocumento, sair, telaEntrar, telaCadastro, telaRecuperar, telaCompletar } from './auth.js'; // 2.3.0: + telaCompletar
-import { rodapeLegal } from './textos.js';
+import { garantirDocumento, telaEntrar, telaCadastro, telaRecuperar, telaCompletar } from './auth.js'; // 2.3.0: + telaCompletar · 2.5.0: sair e rodapeLegal eram só do perfil provisório
 
 const { esc } = utils;
 const $ = s => document.querySelector(s);
@@ -155,28 +164,6 @@ function atualizarTopo() {
   });
 }
 
-/**
- * Perfil PROVISÓRIO (a Sessão 4 faz o perfil real).
- * A Sessão 4 deve manter: botão Falar com a equipe, botão Sair e o rodapé
- * com Termos, Privacidade e Sobre (rodapeLegal() de textos.js).
- */
-const perfilProvisorio = {
-  montar(el, ctx) {
-    const u = estado.usuario || {};
-    el.innerHTML =
-      '<h1>Perfil</h1>' +
-      '<p class="muted">Tela provisória. O perfil completo chega na Sessão 4.</p>' +
-      '<div class="card"><b>' + esc(u.nome || 'Sem nome') + '</b>' +
-      '<p class="muted">' + esc(u.email || auth.currentUser?.email || '') + '</p></div>' +
-      '<button class="big js-contato" type="button">💬 Falar com a equipe</button>' +
-      '<button class="big js-sair" type="button">↩️ Sair</button>' +
-      rodapeLegal();
-    el.querySelector('.js-contato').addEventListener('click', () => ctx.ir('contato', { de: 'perfil' }));
-    const b = el.querySelector('.js-sair');
-    b.addEventListener('click', async () => { b.disabled = true; await sair(ctx); b.disabled = false; });
-  }
-};
-
 /*
   protegida:   só abre para usuário com status "ativo"
   admin:       só abre para quem está em admins/{uid}
@@ -196,7 +183,7 @@ const TELAS = {
   historico:   { titulo: 'Histórico', protegida: true, css: 'orcamento',
                  carregar: modulo(() => import('./historico.js'), provisoria('Histórico', 'Tela provisória. Chega na Sessão 6.')) },
   perfil:      { titulo: 'Perfil',    protegida: true, css: 'perfil',
-                 carregar: modulo(() => import('./perfil.js'), perfilProvisorio) },
+                 carregar: modulo(() => import('./perfil.js'), provisoria('Perfil', 'Confira a internet e tente de novo.')) }, // 2.5.0
   master:      { titulo: 'Painel master', protegida: true, admin: true, carregar: () => import('./master.js') },
 
   boasvindas:  { titulo: 'Boas-vindas',     soDeslogado: true, carregar: () => import('./boasvindas.js') },
@@ -285,6 +272,7 @@ export function ir(tela, params = {}) {
   pedido = { tela, params };
   const alvo = '#' + tela;
   if (location.hash === alvo) mostrar();
+  else if (history.state?.print === 'folha') location.replace(alvo); // 2.5.0: troca o passo da folha pela tela
   else location.hash = alvo; // o hashchange chama mostrar()
 }
 
@@ -297,7 +285,7 @@ async function mostrar() {
   const nome = destinoPara(pedida);
   if (nome !== pedida) {
     // Troca o endereço sem criar um passo a mais no botão Voltar.
-    history.replaceState(null, '', '#' + nome);
+    history.replaceState(history.state, '', '#' + nome); // 2.5.0: mantém a marca do Voltar
   }
   const params = pedido && pedido.tela === nome ? pedido.params : {};
   pedido = null;
@@ -688,11 +676,79 @@ function iniciarPwa() {
 }
 
 /* ============================================================
+   10. Botão Voltar (Android e navegador) — Sessão 10 · 2.5.0
+   - Folha aberta: o Voltar fecha a folha (manda um Esc, que todas atendem).
+   - App instalado: Voltar no último passo mostra "Toque de novo para sair".
+   Marcas em history.state.print: 'base' (primeiro passo), 'trava' (passo extra
+   do app instalado) e 'folha' (passo de uma folha aberta).
+   ============================================================ */
+const voltar = {
+  folha: false,        // há um passo 'folha' no histórico para a folha aberta
+  ignorar: false,      // o próximo popstate foi provocado por nós (history.back)
+  precisaTrava: true   // app instalado: falta o passo extra antes do primeiro
+};
+
+/** Alguma folha aberta? (.ov por cima de tudo, ou a folha de cliente no celular) */
+function folhaAberta() {
+  return !!document.querySelector('.ov') || document.documentElement.classList.contains('cli-travado');
+}
+
+function marcarFolha() {
+  const aberta = folhaAberta();
+  if (aberta && !voltar.folha) {
+    history.pushState({ print: 'folha' }, '', location.href);
+    voltar.folha = true;
+  } else if (!aberta && voltar.folha) {
+    voltar.folha = false;
+    // Fechou pelo botão da própria folha: tira o passo que sobrou.
+    if (history.state?.print === 'folha') { voltar.ignorar = true; history.back(); }
+  }
+}
+
+function fecharFolhaPeloVoltar() {
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true }));
+  // Folha dentro de folha (ex.: confirmação por cima): continua com um passo para a de baixo.
+  setTimeout(marcarFolha, 60);
+}
+
+function aoVoltar(ev) {
+  if (voltar.ignorar) { voltar.ignorar = false; return; }
+  if (voltar.folha) {
+    voltar.folha = false;
+    if (folhaAberta()) { fecharFolhaPeloVoltar(); return; }
+  }
+  if (ev.state?.print === 'base' && pwaInstalado()) {
+    voltar.precisaTrava = true; // o próximo toque na tela arma de novo
+    toast('Toque de novo em Voltar para sair');
+  }
+}
+
+/** App instalado: o passo extra só vale se criado depois de um toque (regra do Chrome). */
+function armarTrava() {
+  if (!voltar.precisaTrava || !pwaInstalado()) return;
+  if (history.state?.print === 'folha') return;
+  voltar.precisaTrava = false;
+  history.pushState({ print: 'trava' }, '', location.href);
+}
+
+function iniciarVoltar() {
+  try {
+    if (!history.state?.print) history.replaceState({ ...(history.state || {}), print: 'base' }, '', location.href);
+  } catch (e) { /* sem histórico: segue sem */ }
+  window.addEventListener('popstate', aoVoltar);
+  window.addEventListener('pointerdown', armarTrava, { capture: true, passive: true });
+  const obs = new MutationObserver(marcarFolha);
+  obs.observe(document.body, { childList: true, subtree: true });
+  obs.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+}
+
+/* ============================================================
    8. Partida
    ============================================================ */
 function iniciar() {
   aplicarTema(lerTema());
   iniciarPwa(); // 2.4.0
+  iniciarVoltar(); // 2.5.0
   document.querySelectorAll('.js-tema').forEach(b => b.addEventListener('click', trocarTema));
   window.matchMedia('(prefers-color-scheme: dark)')
     .addEventListener?.('change', () => aplicarTema(lerTema()));

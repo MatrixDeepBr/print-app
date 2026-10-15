@@ -1,8 +1,11 @@
 /*
   Arquivo: js/master.js
-  Versão: 1.3.0
-  Sessão: 8 — Refinamento do relatório de uso (1.2.0 era da 4B, 1.1.0 da 3B, 1.0.0 da Sessão 3)
+  Versão: 1.3.1
+  Sessão: 10 — Revisão (1.3.0 era da Sessão 8, 1.2.0 da 4B, 1.1.0 da 3B, 1.0.0 da Sessão 3)
   Data: 15/10/2026
+  1.3.1: filtro "Liberados hoje" da aba Usuários conta o dia de Brasília
+         (diaBrasilia do uso.js, igual à aba Uso); exemplo do campo Nome da
+         empresa sem citar a marca. Nada mais mudou.
   1.3.0: aba Uso refeita: resumo do mês (somado do uso/dias, o dia 1º começa
          do zero), gráfico de 14 dias, fichas (Todos, Quem chamar hoje, Sem uso
          há 7 dias, Sumidos há 30 dias, Maiores volumes, Liberados hoje sem uso)
@@ -431,11 +434,11 @@ function atualizarUsuarios() {
   // Lista com busca e filtro
   const termo = normalizar(S.busca);
   const digitos = soDigitos(S.busca);
-  const hoje = U().dataBR(new Date());
+  const hoje = diaBrasilia(); // 1.3.1: dia de Brasília (antes: relógio do aparelho)
   let lista2 = todos.filter(u => {
     const st = u.status || 'pendente';
     if (S.filtro === 'todos') { if (mostrarPend && st === 'pendente') return false; }
-    else if (S.filtro === 'hoje') { if (!u.liberadoEm || U().dataBR(u.liberadoEm) !== hoje) return false; } // 1.1.0
+    else if (S.filtro === 'hoje') { if (!u.liberadoEm || diaDe(u.liberadoEm) !== hoje) return false; } // 1.1.0 · 1.3.1
     else if (S.filtro === 'repetida') { if (u.contaRepetidaAparelho !== true) return false; }              // 1.2.0
     else if (st !== S.filtro) return false;
     if (S.filtroProf !== 'todas' && !lerEspecialidades(u).includes(S.filtroProf)) return false;           // 1.2.0
@@ -937,7 +940,7 @@ function garantirCssUso() {
 
 /* ---------- 5.4 Dados da empresa ---------- */
 const CAMPOS_EMPRESA = [
-  ['nome', 'Nome da empresa (razão social)', 'text', 'Ex.: Collornew Tintas e Revestimentos'],
+  ['nome', 'Nome da empresa (razão social)', 'text', 'Ex.: Nome da Empresa Ltda'],
   ['cnpj', 'CNPJ', 'text', '00.000.000/0000-00'],
   ['endereco', 'Endereço completo', 'text', 'Rua, número, bairro, cidade (UF), CEP'],
   ['responsavelDados', 'Responsável pelos dados (LGPD)', 'text', 'Nome do encarregado'],

@@ -1,8 +1,9 @@
 /*
   Arquivo: js/perfil.js
-  Versão: 1.1.0
-  Sessão: 4B — Várias profissões (1.0.0 era da Sessão 4)
+  Versão: 1.1.1
+  Sessão: 10 — Revisão (1.1.0 era da 4B, 1.0.0 da Sessão 4)
   Data: 15/10/2026
+  1.1.1: erro do navegador ao preparar a logo (em inglês) vira frase em português.
   1.1.0: a Modalidade (escolha única) virou Profissões (marca e desmarca, pelo
          menos 1), com a opção nova "Marido de aluguel / reparos gerais".
          Grava especialidades (lista) e especialidade (a primeira marcada, para
@@ -677,8 +678,11 @@ function ligarCampos(el) {
       redesenharMantendoRolagem();
       sessao?.ctx.toast(sessao.modo === 'guia' ? 'Logo pronta!' : 'Logo pronta! Toque em Salvar.', 'ok');
     } catch (e) {
-      if (info) info.textContent = e.message;
-      sessao?.ctx.toast(e.message, 'erro');
+      // 1.1.1: só as nossas mensagens (português); erro do navegador vira frase simples.
+      const m = sessao?.ctx.utils.traduzErro(e) || 'Não deu para preparar esta imagem. Tente outra foto.';
+      const msg = m === 'Algo deu errado. Tente de novo.' ? 'Não deu para preparar esta imagem. Tente outra foto.' : m;
+      if (info) info.textContent = msg;
+      sessao?.ctx.toast(msg, 'erro');
     }
   });
 

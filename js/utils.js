@@ -1,8 +1,10 @@
 /*
   Arquivo: js/utils.js
-  Versão: 1.1.0
-  Sessão: 2 — Cadastro, login e pendente (planoEfetivo olha o vencimento do Pro)
-  Data: 14/10/2026
+  Versão: 1.2.0
+  Sessão: 10 — Revisão de segurança (1.1.0 era da Sessão 2)
+  Data: 15/10/2026
+  1.2.0: traduzErro nunca mostra texto em inglês: mais códigos traduzidos;
+         erro sem código só mostra a mensagem se ela for nossa (em português).
   Funções pequenas usadas em todo o app. Não depende do Firebase.
 
   Contrato: moeda, esc, num, dataBR, primeiroNome, hojeISO, planoEfetivo
@@ -94,7 +96,7 @@ export function planoEfetivo(usuario) {
   return plano === 'pro' ? 'pro' : 'free';
 }
 
-/** Erro do Firebase -> frase em português simples. */
+/** Erro do Firebase -> frase em português simples. Nunca devolve texto em inglês (1.2.0). */
 export function traduzErro(e) {
   const c = String(e?.code || '').replace(/^firestore\//, '');
   const msg = {
@@ -112,6 +114,20 @@ export function traduzErro(e) {
     'auth/network-request-failed': 'Sem internet. Confira a conexão e tente de novo.',
     'auth/unauthorized-domain': 'Este endereço não está autorizado no Firebase (Authentication > Configurações > Domínios autorizados).',
     'auth/operation-not-allowed': 'Login por e-mail e senha não está ativado no Firebase.',
+    // 1.2.0
+    'auth/popup-blocked': 'O navegador bloqueou a janela do Google. Tente de novo ou use Entrar com e-mail.',
+    'auth/popup-closed-by-user': 'A janela do Google foi fechada antes de terminar.',
+    'auth/cancelled-popup-request': 'A janela do Google foi fechada antes de terminar.',
+    'auth/user-cancelled': 'O login foi cancelado.',
+    'auth/credential-already-in-use': 'Esta conta já está ligada a outro cadastro.',
+    'auth/requires-recent-login': 'Por segurança, saia e entre de novo na conta.',
+    'auth/user-token-expired': 'Sua sessão expirou. Entre de novo na conta.',
+    'auth/invalid-user-token': 'Sua sessão expirou. Entre de novo na conta.',
+    'auth/web-storage-unsupported': 'Este navegador bloqueia o login. Tente outro navegador.',
+    'auth/operation-not-supported-in-this-environment': 'Este jeito de entrar não funciona aqui. Use Entrar com e-mail.',
+    'auth/internal-error': 'O servidor de login falhou. Tente de novo em instantes.',
+    'auth/timeout': 'O servidor demorou demais para responder.',
+    'auth/quota-exceeded': 'Limite de uso do servidor atingido. Tente mais tarde.',
     'permission-denied': 'Sem permissão para isso. Confira se está logado e liberado.',
     'unauthenticated': 'Você precisa entrar na sua conta.',
     'unavailable': 'Sem conexão com o servidor. Tente de novo em instantes.',
@@ -121,9 +137,18 @@ export function traduzErro(e) {
     'resource-exhausted': 'Limite de uso do servidor atingido. Tente mais tarde.',
     'failed-precondition': 'Operação não permitida agora (pode faltar um índice no Firestore).',
     'invalid-argument': 'Algum dado está em formato errado.',
-    'cancelled': 'Operação cancelada.'
+    'cancelled': 'Operação cancelada.',
+    'aborted': 'Outra gravação aconteceu ao mesmo tempo. Tente de novo.',
+    'out-of-range': 'Algum dado está em formato errado.',
+    'data-loss': 'Algo deu errado ao gravar. Tente de novo.',
+    'internal': 'O servidor falhou. Tente de novo em instantes.',
+    'unknown': 'Algo deu errado. Tente de novo.',
+    'unimplemented': 'Esta função não funciona neste aparelho.'
   }[c];
   if (msg) return msg;
-  if (c) return 'Algo deu errado (' + c + ').';
-  return e?.message ? 'Algo deu errado: ' + e.message : 'Algo deu errado.';
+  if (c) return 'Algo deu errado. Tente de novo. (código: ' + c + ')';
+  // Sem código: só mostra a mensagem se for uma das nossas (em português).
+  const m = String(e?.message || '');
+  if (/[ãõçáéíóúâêô]|^(Não|Sem|Escolha|Esta|Digite|Entre|Tente)\b/.test(m)) return m;
+  return 'Algo deu errado. Tente de novo.';
 }

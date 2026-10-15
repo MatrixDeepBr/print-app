@@ -1,8 +1,10 @@
 /*
   Arquivo: sw.js
-  Versão: 1.0.0
-  Sessão: 9 — Instalação como app (PWA) e abrir sem internet
+  Versão: 1.0.1
+  Sessão: 10 — Revisão (1.0.0 era da Sessão 9)
   Data: 15/10/2026
+  1.0.1: só subiu VERSAO (arquivos do app mudaram na Sessão 10). Lista
+         ARQUIVOS_APP conferida: nenhum arquivo novo.
 
   Guarda no aparelho o "esqueleto" do Print para ele abrir sem internet.
 
@@ -24,7 +26,7 @@
     (o pintor tocou em "Nova versão do Print. Tocar para atualizar").
 */
 
-const VERSAO = '1.0.0';
+const VERSAO = '1.0.1';
 const CACHE = 'print-' + VERSAO;
 
 const ARQUIVOS_APP = [

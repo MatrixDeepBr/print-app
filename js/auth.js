@@ -1,9 +1,14 @@
 /*
   Arquivo: js/auth.js
-  Versão: 2.0.0
-  Sessão: 4B — Cadastro e conta (Google, WhatsApp único, várias profissões)
+  Versão: 2.1.0
+  Sessão: 10 — Revisão (2.0.0 era da 4B, 1.0.0 da Sessão 2)
   Data: 15/10/2026
-  (1.0.0 era da Sessão 2)
+
+  2.1.0 (remendo do iPhone, decisão do Maestro): no app instalado no iPhone
+  (tela cheia + iOS), o login do Google pode não voltar para o app. Ali as
+  telas Entrar e Criar conta mostram o e-mail em destaque, com a linha
+  "No iPhone, entre com e-mail e senha." O Google fica como segunda opção,
+  embaixo. Em qualquer outro aparelho, nada mudou.
 
   Telas: Entrar, Criar conta (e-mail), Recuperar senha e Complete seu cadastro.
   Funções: sair(ctx), garantirDocumento(user).
@@ -177,6 +182,17 @@ function ocupado(btn, sim, txt) {
   btn.disabled = sim;
   if (txt) btn.innerHTML = txt;
 }
+
+/** 2.1.0: app instalado (tela cheia) num iPhone/iPad. */
+function iphoneInstalado() {
+  try {
+    const ua = navigator.userAgent || '';
+    const ios = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+    const app = window.navigator.standalone === true || !!window.matchMedia?.('(display-mode: standalone)').matches;
+    return ios && app;
+  } catch (e) { return false; }
+}
+const LINHA_IPHONE = 'No iPhone, entre com e-mail e senha.';
 
 /* ============================================================
    4. Marca no aparelho (print.contas)
@@ -441,14 +457,21 @@ export async function sair(ctx) {
 export const telaEntrar = {
   montar(el, ctx) {
     prepararAvisos(ctx);
-    const abrirEmail = !!ctx.params?.email || ctx.params?.modo === 'email' || ler('print.entrada') === 'email';
+    const iphone = iphoneInstalado(); // 2.1.0
+    const abrirEmail = iphone || !!ctx.params?.email || ctx.params?.modo === 'email' || ler('print.entrada') === 'email';
+
+    const blocoGoogle = iphone
+      ? '<p class="auth-ou">ou</p>' +
+        '<button class="big auth-google js-google" type="button">' + G_ICONE + '<span>Entrar com Google</span></button>'
+      : botaoGoogle('Entrar com Google') +
+        '<p class="campo-ajuda auth-dica">Primeira vez? O cadastro é feito logo em seguida.</p>';
 
     el.innerHTML =
-      cabecalho('Entrar', 'Toque no botão do Google e escolha a sua conta. Sem digitar e-mail nem senha.') +
-      botaoGoogle('Entrar com Google') +
-      '<p class="campo-ajuda auth-dica">Primeira vez? O cadastro é feito logo em seguida.</p>' +
+      (iphone
+        ? cabecalho('Entrar', LINHA_IPHONE)
+        : cabecalho('Entrar', 'Toque no botão do Google e escolha a sua conta. Sem digitar e-mail nem senha.') + blocoGoogle) +
       '<div class="auth-alt">' +
-        '<button class="big js-abrir-email" type="button" aria-expanded="' + abrirEmail + '"' + (abrirEmail ? ' hidden' : '') + '>✉️ Entrar com e-mail</button>' +
+        '<button class="big js-abrir-email" type="button" aria-expanded="' + abrirEmail + '"' + (abrirEmail ? ' hidden style="display:none"' : '') + '>✉️ Entrar com e-mail</button>' + // 2.1.0: .big ignorava o hidden
         '<div class="js-email"' + (abrirEmail ? '' : ' hidden') + '>' +
           '<p class="auth-ou">Entrar com e-mail e senha</p>' +
           '<form class="js-form" novalidate>' +
@@ -461,7 +484,8 @@ export const telaEntrar = {
           '<button class="big js-esqueci" type="button">Esqueci a senha</button>' +
           '<button class="big js-criar" type="button">Criar conta com e-mail</button>' +
         '</div>' +
-      '</div>';
+      '</div>' +
+      (iphone ? blocoGoogle : ''); // 2.1.0: no iPhone instalado o Google fica embaixo
 
     ligarVerSenha(el);
     const f = el.querySelector('.js-form');
@@ -473,6 +497,7 @@ export const telaEntrar = {
     bAbrir.addEventListener('click', () => {
       caixa.hidden = false;
       bAbrir.hidden = true;
+      bAbrir.style.display = 'none'; // 2.1.0
       bAbrir.setAttribute('aria-expanded', 'true');
       (f.email.value ? f.senha : f.email).focus();
     });
@@ -510,10 +535,13 @@ export const telaCadastro = {
     prepararAvisos(ctx);
     const r = rascunho;
     const esp0 = Array.isArray(r.especialidades) ? r.especialidades : [];
+    const iphone = iphoneInstalado(); // 2.1.0
     el.innerHTML =
-      cabecalho('Criar minha conta', 'O jeito mais rápido é com a sua conta Google. Depois a equipe libera o seu acesso.') +
-      botaoGoogle('Continuar com Google') +
-      '<p class="auth-ou">ou crie com e-mail e senha</p>' +
+      (iphone
+        ? cabecalho('Criar minha conta', 'No iPhone, crie a conta com e-mail e senha. Depois a equipe libera o seu acesso.')
+        : cabecalho('Criar minha conta', 'O jeito mais rápido é com a sua conta Google. Depois a equipe libera o seu acesso.') +
+          botaoGoogle('Continuar com Google') +
+          '<p class="auth-ou">ou crie com e-mail e senha</p>') +
       '<form class="js-form" novalidate>' +
         '<label for="c-nome">Seu nome</label>' +
         '<input id="c-nome" name="nome" autocomplete="name" autocapitalize="words" maxlength="80" required value="' + esc(r.nome || '') + '">' +
@@ -537,6 +565,7 @@ export const telaCadastro = {
         '<div class="links-termos"><a href="#termos">Ler os Termos</a><a href="#termos/privacidade">Ler a Privacidade</a></div>' +
         '<button class="big primary js-criar" type="submit" style="margin-top:14px">Criar minha conta</button>' +
       '</form>' +
+      (iphone ? '<p class="auth-ou">ou</p><button class="big auth-google js-google" type="button">' + G_ICONE + '<span>Continuar com Google</span></button>' : '') + // 2.1.0
       '<div class="auth-alt"><span class="muted">Já tem conta?</span>' +
       '<button class="big js-entrar" type="button">Entrar</button></div>';
 
