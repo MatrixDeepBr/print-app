@@ -1,8 +1,9 @@
 /*
   Arquivo: js/historico.js
-  Versão: 1.0.0
+  Versão: 1.1.0
   Sessão: 6 — Orçamento e histórico
   Data: 15/10/2026
+  1.1.0: Duplicar também copia o prazo da obra (prazoDias, prazoUteis).
   Tela do histórico (#historico): todos os orçamentos do pintor, do mais novo
   para o mais velho (atualizadoEm), com busca por cliente ou número e filtro
   por status. Tocar abre o orçamento (ir('orcamento', { id })). O botão ⋯ abre
@@ -216,6 +217,7 @@ function duplicar(id) {
     areas: o.areas || {}, itens: Array.isArray(o.itens) ? o.itens : [],
     descontoPct: num(o.descontoPct), subtotal: num(o.subtotal), total: num(o.total),
     observacao: o.observacao || '', validadeDias: num(o.validadeDias) || 15, modeloPdf: o.modeloPdf || 'classico',
+    prazoDias: num(o.prazoDias), prazoUteis: !!o.prazoUteis,
     etapa: o.clienteNome ? 'conferencia' : 'cliente', aba: o.aba === 'ext' ? 'ext' : 'int'
   }));
   try {

@@ -1,8 +1,12 @@
 /*
   Arquivo: js/orcamento.js
-  Versão: 1.0.0
+  Versão: 1.1.0
   Sessão: 6 — Orçamento e histórico
   Data: 15/10/2026
+  1.1.0 (pedido do dono no teste): tela das áreas com 3 botões (Só interno,
+        Só externo, Interno e externo) que já avançam com um toque; com as duas
+        partes, abas destacadas com ✔, "Parte 1 de 2" e botão "Próximo: Externo →";
+        prazo da obra opcional (prazoDias, prazoUteis) no Resumo e na prévia.
   Tela do orçamento (#orcamento), igual ao protótipo aprovado:
     Cliente → Áreas → Serviços → Conferência → Resumo (Concluir e Gerar PDF)
 
@@ -110,6 +114,9 @@ const at = (o, a) => o.areas[a].modo === 'fechado'
 const subt = o => sel(o).reduce((s, a) => s + at(o, a), 0);
 const desc = o => Math.min(100, Math.max(0, num(o.descontoPct)));
 const totl = o => subt(o) * (1 - desc(o) / 100);
+/** Prazo da obra em dias (0 = não informado). */
+const prazo = o => Math.max(0, Math.min(999, Math.round(num(o.prazoDias))));
+const textoPrazo = o => prazo(o) ? prazo(o) + (prazo(o) === 1 ? (o.prazoUteis ? ' dia útil' : ' dia') : (o.prazoUteis ? ' dias úteis' : ' dias')) : '';
 /** Mostra a estrela "Salvar como meu padrão"? (regra do protótipo) */
 const pode = it => !it.salvo && it.cobr === 'm2' && num(it.preco) > 0 && (it.origem === 'modelo' || num(it.preco) !== num(it.orig));
 
@@ -127,6 +134,7 @@ function vazio(perfil = {}) {
     validadeDias: String(num(perfil.validadeDias) || 15),
     modeloPdf: modeloOk(perfil.modeloPdf),
     status: 'rascunho', concluido: false, contadoNoUso: false,
+    prazoDias: '', prazoUteis: false,
     etapa: 'cliente', aba: 'int', criadoEm: null
   };
 }
@@ -155,6 +163,8 @@ function deDoc(id, d) {
     modeloPdf: modeloOk(d.modeloPdf),
     status: STATUS[d.status] ? d.status : 'rascunho',
     concluido: !!d.concluido, contadoNoUso: !!d.contadoNoUso,
+    prazoDias: num(d.prazoDias) > 0 ? String(Math.round(num(d.prazoDias))) : '',
+    prazoUteis: !!d.prazoUteis,
     criadoEm: d.criadoEm || null
   });
   o.etapa = ETAPAS.includes(d.etapa) ? d.etapa : (o.clienteNome ? 'conferencia' : 'cliente');
@@ -184,6 +194,8 @@ function paraDados(o) {
     observacao: String(o.observacao || '').trim(),
     validadeDias: Math.max(1, Math.round(num(o.validadeDias))) || 15,
     modeloPdf: modeloOk(o.modeloPdf),
+    prazoDias: prazo(o),
+    prazoUteis: !!o.prazoUteis,
     etapa: o.etapa, aba: o.aba
   };
 }
@@ -598,13 +610,30 @@ function salvarRapido() {
 }
 
 /* ---------- 2. Áreas ---------- */
+/** 1.1.0: 3 botões grandes; um toque escolhe e já avança (antes eram 2 para marcar). */
+const OPCOES_AREA = [
+  ['int', '🏠', 'Só interno', AR.int.d],
+  ['ext', '🏢', 'Só externo', AR.ext.d],
+  ['ambos', '🏠🏢', 'Interno e externo', 'Por dentro e por fora. Você preenche uma parte de cada vez.']
+];
+
+function escolhaAtual(o) {
+  const s = sel(o);
+  return s.length === 2 ? 'ambos' : (s[0] || '');
+}
+
 function telaAreas() {
-  const o = S.o;
-  return cab() + '<h1>Qual serviço é esse?</h1><p class="muted">Marque um ou os dois. Cada um vira uma fase do orçamento.</p>' +
-    ['int', 'ext'].map(a => '<button type="button" class="area' + (o.areas[a].ativo ? ' on' : '') + '" data-act="togarea" data-a="' + a + '" aria-pressed="' + o.areas[a].ativo + '">' +
-      '<span class="orc-area-ic" aria-hidden="true">' + AR[a].ic + '</span><div><b>' + AR[a].n + '</b><span>' + AR[a].d + '</span></div>' +
-      '<i class="ck" aria-hidden="true">' + (o.areas[a].ativo ? '✔' : '') + '</i></button>').join('') +
-    barra('Continuar', 'avancar');
+  const atual = escolhaAtual(S.o);
+  return cab() + '<h1>Qual serviço é esse?</h1><p class="muted">Toque em uma opção.</p>' +
+    OPCOES_AREA.map(([v, ic, n, d]) => '<button type="button" class="area' + (atual === v ? ' on' : '') + '" data-act="areas" data-v="' + v + '" aria-pressed="' + (atual === v) + '">' +
+      '<span class="orc-area-ic" aria-hidden="true">' + ic + '</span><div><b>' + n + '</b><span>' + d + '</span></div>' +
+      '<i class="ck" aria-hidden="true">' + (atual === v ? '✔' : '›') + '</i></button>').join('');
+}
+
+/** A área já tem o mínimo para seguir? */
+function areaPronta(o, a) {
+  const ar = o.areas[a];
+  return ar.modo === 'fechado' ? num(ar.valorFechado) > 0 : o.itens.some(i => i.area === a);
 }
 
 /* ---------- 3. Serviços ---------- */
@@ -627,9 +656,16 @@ function usados(a) {
 }
 
 function telaServicos() {
-  const o = S.o, a = o.aba, ar = o.areas[a];
+  const o = S.o, a = o.aba, ar = o.areas[a], s = sel(o);
+  const parte = s.indexOf(a) + 1;
   let h = cab() + '<h1>O que você vai fazer?</h1>' +
-    (sel(o).length > 1 ? seg(sel(o).map(x => [x, AR[x].ic + ' ' + AR[x].s]), a, 'aba') : '<p class="muted">' + AR[a].n + '</p>') +
+    (s.length > 1
+      ? '<div class="orc-abas" role="tablist" aria-label="Partes do orçamento">' + s.map(x =>
+          '<button type="button" role="tab" class="orc-aba' + (x === a ? ' on' : '') + '" data-act="aba" data-v="' + x + '" aria-selected="' + (x === a) + '">' +
+          '<span aria-hidden="true">' + AR[x].ic + '</span> ' + AR[x].s +
+          (areaPronta(o, x) ? ' <span class="orc-aba-ok" aria-label="preenchido">✔</span>' : '') + '</button>').join('') + '</div>' +
+        '<p class="orc-parte">Parte ' + parte + ' de ' + s.length + ' · ' + AR[a].n + '</p>'
+      : '<p class="orc-parte">' + AR[a].ic + ' ' + AR[a].n + '</p>') +
     '<h2>Como vai cobrar o ' + AR[a].s.toLowerCase() + '?</h2>' +
     seg([['fechado', 'Valor fechado'], ['itens', 'Escolher serviços']], ar.modo, 'modo');
 
@@ -655,7 +691,11 @@ function telaServicos() {
       (mo.length ? mo.map(m => chip(m, 'addp')).join('') : '<p class="muted">Todos os modelos já foram adicionados.</p>') +
       usados(a);
   }
-  return h + barra('Continuar' + (o.itens.length ? ' (' + o.itens.length + ')' : ''), 'avancar');
+  // 1.1.0: com duas partes, o botão leva para a próxima parte antes da conferência.
+  const prox = s[s.indexOf(a) + 1];
+  if (prox) return h + barra('Próximo: ' + AR[prox].ic + ' ' + AR[prox].s + ' →', 'proxarea');
+  const n = o.itens.filter(i => o.areas[i.area].ativo).length;
+  return h + barra('Continuar' + (n ? ' (' + n + ')' : ''), 'avancar');
 }
 
 /* ---------- 4. Conferência ---------- */
@@ -719,6 +759,7 @@ function previa() {
       (varias ? '<tr><td colspan="2"><b>Subtotal</b></td><td><b>' + esc(moeda(at(o, a))) + '</b></td></tr>' : '') + '</table>').join('') +
     (desc(o) ? '<div class="orc-pmu">Subtotal ' + esc(moeda(subt(o))) + ' · Desconto ' + esc(txtN(desc(o))) + '%</div>' : '') +
     '<div class="orc-total">' + esc(moeda(totl(o))) + '</div>' +
+    '<div class="orc-pprazo js-pprazo"' + (prazo(o) ? '' : ' hidden') + '><b>Prazo estimado:</b> <span class="js-pprazo-txt">' + esc(textoPrazo(o)) + '</span></div>' +
     (o.observacao.trim() ? '<div class="orc-pobs"><b>Observações</b><div class="orc-pre">' + esc(o.observacao.trim()) + '</div></div>' : '') +
     (p.condicoes ? '<div class="orc-pobs"><b>Condições</b><div class="orc-pre">' + esc(p.condicoes) + '</div></div>' : '') +
     (p.pix ? '<div class="orc-pobs"><b>PIX:</b> ' + esc(p.pix) + '</div>' : '') +
@@ -734,6 +775,10 @@ function telaResumo() {
       : '<p class="muted">Confira a prévia e toque em <b>Concluir</b>.</p>') +
     '<div class="orc-opcoes"><div><span class="rotulo">Visual do PDF</span>' + seg(MODELOS_PDF, o.modeloPdf, 'mod') + '</div>' +
     '<div class="orc-validade"><label for="orc-val">Validade (dias)</label><input id="orc-val" data-f="validade" value="' + esc(o.validadeDias) + '" inputmode="numeric" autocomplete="off"></div></div>' +
+    '<div class="orc-prazo"><label for="orc-prazo">Prazo da obra <span class="muted">(opcional)</span></label>' +
+      '<div class="orc-prazo-linha"><input id="orc-prazo" data-f="prazo" value="' + esc(o.prazoDias) + '" inputmode="numeric" placeholder="Em aberto" autocomplete="off" aria-describedby="orc-prazo-ajuda">' +
+      seg([['corridos', 'dias'], ['uteis', 'dias úteis']], o.prazoUteis ? 'uteis' : 'corridos', 'prazoun') + '</div>' +
+      '<p class="campo-ajuda" id="orc-prazo-ajuda">Vazio, o prazo não aparece no orçamento.</p></div>' +
     previa() +
     '<div class="orc-acoes">' +
       (o.concluido ? '' : '<button type="button" class="big primary" data-act="concluir">✔ Concluir orçamento</button>') +
@@ -902,6 +947,9 @@ async function gerarPdf() {
     id: o.id, numero: o.numero, ...paraDados(o),
     status: o.status, concluido: o.concluido, criadoEm: o.criadoEm || new Date()
   };
+  // Só os itens das partes escolhidas (se o pintor trocou de "Interno e externo"
+  // para "Só interno", os itens do externo ficam guardados no rascunho, mas não vão pro PDF).
+  orcamento.itens = orcamento.itens.filter(i => orcamento.areas[i.area]?.ativo);
   let mod;
   try { mod = await import('./pdf.js'); }
   catch (e) { console.warn('[Print] pdf.js ainda não existe', e); ctx.toast('O PDF chega na próxima atualização'); return; }
@@ -1037,6 +1085,30 @@ function aoClicar(ev) {
       if (t) { t.focus(); t.setSelectionRange(t.value.length, t.value.length); }
       return mudou();
     }
+    case 'areas': {
+      const v = d.v;
+      o.areas.int.ativo = v === 'int' || v === 'ambos';
+      o.areas.ext.ativo = v === 'ext' || v === 'ambos';
+      o.aba = sel(o)[0];
+      return irEtapa('servicos');
+    }
+    case 'proxarea': {
+      if (!areaPronta(o, o.aba)) {
+        return toast(o.areas[o.aba].modo === 'fechado'
+          ? 'Informe o valor fechado do ' + AR[o.aba].s.toLowerCase()
+          : 'Adicione serviços no ' + AR[o.aba].s.toLowerCase());
+      }
+      const s = sel(o);
+      o.aba = s[s.indexOf(o.aba) + 1] || s[0];
+      S.criando = false;
+      render();
+      window.scrollTo(0, 0);
+      return mudou();
+    }
+    case 'prazoun':
+      o.prazoUteis = d.v === 'uteis';
+      render();
+      return mudou();
     case 'mod':
       o.modeloPdf = modeloOk(d.v);
       render();
@@ -1060,6 +1132,7 @@ function aoDigitar(ev) {
     case 'desc': o.descontoPct = v; break;
     case 'obs': o.observacao = v; break;
     case 'validade': o.validadeDias = v; break;
+    case 'prazo': o.prazoDias = v; break;
     case 'qtd': case 'preco': { const it = o.itens[+t.dataset.i]; if (it) it[f] = v; break; }
     default: return;
   }
@@ -1081,6 +1154,8 @@ function atualizarNumeros() {
   if (a) a.textContent = moeda(subt(o));
   if (b) b.textContent = moeda(totl(o));
   if (v) v.textContent = Math.max(1, Math.round(num(o.validadeDias))) || 15;
+  const pz = el.querySelector('.js-pprazo');
+  if (pz) { pz.hidden = !prazo(o); pz.querySelector('.js-pprazo-txt').textContent = textoPrazo(o); }
 }
 
 /** Enter no nome do cadastro rápido pula para o WhatsApp; no WhatsApp, salva. */

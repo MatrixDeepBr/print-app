@@ -1,8 +1,9 @@
 /*
   Arquivo: css/orcamento.css
-  Versão: 1.0.0
+  Versão: 1.1.0
   Sessão: 6 — Orçamento e histórico
   Data: 15/10/2026
+  1.1.0: abas Interno/Externo destacadas, "Parte 1 de 2", campo e linha do prazo da obra.
   Visual das telas Orçamento (#orcamento) e Histórico (#historico).
   Carregado pelo app.js antes de montar as duas telas.
   Usa os componentes e tokens do style.css (.chip, .line, .seg, .bar, .fab, .ov…).
@@ -75,7 +76,24 @@
 .orc-seta { font-size: 24px; color: var(--muted); flex: none; }
 
 /* Áreas */
-.orc-area-ic { font-size: 32px; flex: none; }
+.area .orc-area-ic { font-size: 28px; color: inherit; flex: none; min-width: 48px; text-align: center; }
+.area .ck { font-size: 26px; }
+
+/* 1.1.0: abas Interno / Externo (cara de aba, com ✔ na parte preenchida) */
+.orc-abas { display: grid; grid-template-columns: 1fr 1fr; gap: 0; margin: 12px 0 0; border-bottom: 2px solid var(--line); }
+.orc-aba {
+  min-height: 52px;
+  border: 0;
+  border-bottom: 4px solid transparent;
+  margin-bottom: -2px;
+  background: none;
+  color: var(--muted);
+  font-size: 17px;
+  font-weight: 700;
+}
+.orc-aba.on { color: var(--brand); border-bottom-color: var(--brand); background: var(--soft); border-radius: 12px 12px 0 0; }
+.orc-aba-ok { color: var(--ok); }
+.orc-parte { margin: 10px 0 0; font-weight: 700; font-size: 15px; color: var(--brand); }
 
 /* Serviços e conferência */
 .two.orc-sem-pad { padding: 0; }
@@ -96,6 +114,13 @@
 .orc-opcoes .rotulo { display: block; margin: 8px 0 0; }
 .orc-validade label { margin-top: 4px; }
 @media (min-width: 560px) { .orc-opcoes { grid-template-columns: 1fr 140px; align-items: end; } }
+.orc-prazo { margin: 0 0 14px; }
+.orc-prazo label { margin-top: 4px; }
+.orc-prazo label .muted { font-weight: 500; }
+.orc-prazo-linha { display: flex; gap: 10px; align-items: center; }
+.orc-prazo-linha input { width: 110px; flex: none; }
+.orc-prazo-linha .seg { flex: 1; margin: 0; }
+.orc-pprazo { margin-top: 10px; text-align: right; }
 .orc-acoes { margin-top: 16px; }
 .orc-acoes .big { justify-content: center; }
 
