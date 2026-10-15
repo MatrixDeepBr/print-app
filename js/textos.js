@@ -1,34 +1,67 @@
 /*
   Arquivo: js/textos.js
-  Versão: 1.0.0
-  Sessão: 2 — Cadastro, login e pendente
+  Versão: 1.1.0
+  Sessão: 3 — Painel master (dados da empresa lidos de config/empresa)
   Data: 14/10/2026
   Termos de uso, Política de Privacidade e Sobre (RASCUNHO).
+  Os dados da empresa (nome, CNPJ, endereço, responsável pelos dados, e-mail e
+  telefone) vêm de config/empresa, preenchido no painel master (aba Empresa).
+  Campo vazio aparece como "[preencher no painel: …]". Leitura pública (sem login).
   Rota: #termos (Termos), #termos/privacidade, #termos/sobre.
   A Collornew é citada SÓ aqui (marca neutra no resto do app).
 
   Contrato: montar(container, ctx)
   Extras:   VERSAO_TERMOS (gravada no cadastro), rodapeLegal() (links para o rodapé do Perfil)
 
-  Trechos entre [colchetes] precisam ser preenchidos pelo dono antes do piloto.
+  Trechos "[preencher no painel: …]" somem quando o dono preenche a aba Empresa.
 */
+
+import { db, fs } from './firebase.js';
+import { esc } from './utils.js';
 
 /** Mude esta versão sempre que o texto dos Termos ou da Política mudar. */
 export const VERSAO_TERMOS = '2026-10-14-rascunho';
 
-const RESPONSAVEL = 'Collornew Tintas e Revestimentos';
-const CONTATO_EMAIL = 'collornewrp@gmail.com';
-
 const AVISO = '<p class="rascunho">RASCUNHO — revisar com contador ou advogado</p>';
 
-const TEXTOS = {
+/* Dados da empresa (config/empresa). Guardados na memória depois da 1ª leitura. */
+let empresa = null;
+
+function preencher(rotulo) {
+  return '<span class="preencher">[preencher no painel: ' + rotulo + ']</span>';
+}
+/** Valor do campo, protegido para o HTML, ou o aviso de preencher. */
+function campo(k, rotulo) {
+  const v = String(empresa?.[k] ?? '').trim();
+  return v ? esc(v) : preencher(rotulo);
+}
+
+async function carregarEmpresa() {
+  try {
+    const s = await fs.getDoc(fs.doc(db, 'config', 'empresa'));
+    empresa = s.exists() ? s.data() : {};
+  } catch (e) {
+    console.warn('[Print] dados da empresa', e);
+    if (!empresa) empresa = {};
+  }
+  return empresa;
+}
+
+function montarTextos() {
+  const RESPONSAVEL = campo('nome', 'nome da empresa');
+  const CNPJ = 'CNPJ ' + campo('cnpj', 'CNPJ');
+  const ENDERECO = campo('endereco', 'endereço');
+  const ENCARREGADO = campo('responsavelDados', 'responsável pelos dados');
+  const CONTATO_EMAIL = campo('email', 'e-mail de contato');
+  const TELEFONE = String(empresa?.telefone ?? '').trim() ? ', pelo telefone ' + esc(empresa.telefone.trim()) : '';
+  return {
   termos: {
     titulo: 'Termos de uso',
     html:
       AVISO +
       '<p class="muted">Versão ' + VERSAO_TERMOS + '</p>' +
       '<h2>1. Quem oferece o app</h2>' +
-      '<p>O Print — Orçamentos e Gestão é oferecido pela ' + RESPONSAVEL + ', [CNPJ a preencher], com sede em São José do Rio Preto (SP), [endereço a preencher].</p>' +
+      '<p>O Print — Orçamentos e Gestão é oferecido por ' + RESPONSAVEL + ', ' + CNPJ + ', com sede em ' + ENDERECO + '.</p>' +
       '<h2>2. Para que serve</h2>' +
       '<p>O Print ajuda profissionais da construção civil a montar orçamentos, cuidar dos clientes e organizar o próprio trabalho.</p>' +
       '<h2>3. O app é grátis</h2>' +
@@ -50,7 +83,7 @@ const TEXTOS = {
       '<h2>8. Mudanças nestes termos</h2>' +
       '<p>Se estes termos mudarem, avisamos no app. Mudanças que envolvam cobrança seguem o aviso de 30 dias do item 3.</p>' +
       '<h2>9. Contato</h2>' +
-      '<p>Pelo botão Falar com a equipe, no app, ou pelo e-mail ' + CONTATO_EMAIL + '.</p>' +
+      '<p>Pelo botão Falar com a equipe, no app, pelo e-mail ' + CONTATO_EMAIL + TELEFONE + '.</p>' +
       '<p>Fica eleito o foro de São José do Rio Preto (SP).</p>'
   },
 
@@ -61,8 +94,8 @@ const TEXTOS = {
       '<p class="muted">Versão ' + VERSAO_TERMOS + '</p>' +
       '<p>Esta política explica quais dados o Print guarda, para quê, e quais são os seus direitos, conforme a Lei Geral de Proteção de Dados (LGPD, Lei nº 13.709/2018).</p>' +
       '<h2>1. Quem cuida dos dados</h2>' +
-      '<p>' + RESPONSAVEL + ', [CNPJ a preencher], São José do Rio Preto (SP).</p>' +
-      '<p>Encarregado de dados (LGPD): [nome a preencher], pelo e-mail ' + CONTATO_EMAIL + '.</p>' +
+      '<p>' + RESPONSAVEL + ', ' + CNPJ + ', ' + ENDERECO + '.</p>' +
+      '<p>Encarregado de dados (LGPD): ' + ENCARREGADO + ', pelo e-mail ' + CONTATO_EMAIL + '.</p>' +
       '<h2>2. Dados da sua conta</h2>' +
       '<p>Nome, WhatsApp, cidade, e-mail, código de parceiro (se você informar), data do cadastro e data do aceite destes termos.</p>' +
       '<p><b>Para quê:</b> criar e manter a sua conta, liberar o acesso e falar com você quando precisar.</p>' +
@@ -83,7 +116,7 @@ const TEXTOS = {
       '<h2>7. Seus direitos</h2>' +
       '<p>Você pode, a qualquer momento: saber quais dados temos, receber uma cópia (exportar), corrigir, pedir a exclusão, se opor ao acompanhamento de uso e tirar dúvidas sobre esta política.</p>' +
       '<h2>8. Como pedir</h2>' +
-      '<p>Pelo botão Falar com a equipe, no app, ou pelo e-mail ' + CONTATO_EMAIL + '. Respondemos em até 15 dias.</p>'
+      '<p>Pelo botão Falar com a equipe, no app, pelo e-mail ' + CONTATO_EMAIL + TELEFONE + '. Respondemos em até 15 dias.</p>'
   },
 
   sobre: {
@@ -92,10 +125,11 @@ const TEXTOS = {
       '<p><b>Print — Orçamentos e Gestão</b></p>' +
       '<p class="muted">Versão piloto · outubro de 2026</p>' +
       '<p>Um app feito para pintores e profissionais da construção civil montarem orçamentos na frente do cliente e organizarem o próprio trabalho, no celular e no computador.</p>' +
-      '<p>Responsável: ' + RESPONSAVEL + ', São José do Rio Preto (SP).</p>' +
+      '<p>Responsável: ' + RESPONSAVEL + ', ' + ENDERECO + '.</p>' +
       '<p>Dúvidas, ideias ou benefícios para profissionais? Use o botão Falar com a equipe.</p>'
   }
-};
+  };
+}
 
 const ABAS = [['termos', 'Termos'], ['privacidade', 'Privacidade'], ['sobre', 'Sobre']];
 
@@ -109,31 +143,47 @@ export function rodapeLegal() {
 /** Qual texto abrir: #termos/privacidade -> 'privacidade'. */
 function qualDoEndereco() {
   const sub = location.hash.replace(/^#\/?/, '').split('/')[1] || '';
-  return TEXTOS[sub] ? sub : 'termos';
+  return ['termos', 'privacidade', 'sobre'].includes(sub) ? sub : 'termos';
 }
 
-export function montar(el, ctx) {
-  const qual = (ctx.params && TEXTOS[ctx.params.qual]) ? ctx.params.qual : qualDoEndereco();
-  const t = TEXTOS[qual];
+export async function montar(el, ctx) {
+  const pedido = ctx.params && ['termos', 'privacidade', 'sobre'].includes(ctx.params.qual) ? ctx.params.qual : null;
+  let qual = pedido || qualDoEndereco();
   el.classList.add('texto-legal');
-  el.innerHTML =
-    '<div class="top"><button class="back js-voltar" type="button" aria-label="Voltar">←</button></div>' +
-    '<div class="seg tres" role="tablist">' +
-      ABAS.map(([k, n]) => '<button type="button" role="tab" aria-selected="' + (k === qual) + '" class="' + (k === qual ? 'on' : '') + '" data-qual="' + k + '">' + n + '</button>').join('') +
-    '</div>' +
-    '<h1>' + t.titulo + '</h1>' +
-    t.html +
-    '<button class="big js-voltar" type="button" style="margin-top:20px">Voltar</button>';
 
-  el.querySelectorAll('[data-qual]').forEach(b => b.addEventListener('click', () => {
-    const k = b.dataset.qual;
-    history.replaceState(null, '', k === 'termos' ? '#termos' : '#termos/' + k);
-    montar(el, { ...ctx, params: { qual: k } });
-    window.scrollTo(0, 0);
-  }));
-  el.querySelectorAll('.js-voltar').forEach(b => b.addEventListener('click', () => {
-    // Volta para a tela de onde veio (ex.: cadastro, sem perder o que já foi digitado).
-    if (history.length > 1) history.back();
-    else ctx.ir('inicio');
-  }));
+  function desenhar() {
+    const t = montarTextos()[qual];
+    el.innerHTML =
+      '<div class="top"><button class="back js-voltar" type="button" aria-label="Voltar">←</button></div>' +
+      '<div class="seg tres" role="tablist">' +
+        ABAS.map(([k, n]) => '<button type="button" role="tab" aria-selected="' + (k === qual) + '" class="' + (k === qual ? 'on' : '') + '" data-qual="' + k + '">' + n + '</button>').join('') +
+      '</div>' +
+      '<h1>' + t.titulo + '</h1>' +
+      t.html +
+      '<button class="big js-voltar" type="button" style="margin-top:20px">Voltar</button>';
+
+    el.querySelectorAll('[data-qual]').forEach(b => b.addEventListener('click', () => {
+      qual = b.dataset.qual;
+      history.replaceState(null, '', qual === 'termos' ? '#termos' : '#termos/' + qual);
+      desenhar();
+      window.scrollTo(0, 0);
+    }));
+    el.querySelectorAll('.js-voltar').forEach(b => b.addEventListener('click', () => {
+      // Volta para a tela de onde veio (ex.: cadastro, sem perder o que já foi digitado).
+      if (history.length > 1) history.back();
+      else ctx.ir('inicio');
+    }));
+  }
+
+  // Na 1ª vez espera os dados da empresa; depois desenha na hora e confere se mudaram.
+  if (!empresa) {
+    el.innerHTML = '<p class="muted">Carregando…</p>';
+    await carregarEmpresa();
+    if (el.isConnected) desenhar();
+    return;
+  }
+  desenhar();
+  const antes = JSON.stringify(empresa);
+  await carregarEmpresa();
+  if (el.isConnected && JSON.stringify(empresa) !== antes) desenhar();
 }

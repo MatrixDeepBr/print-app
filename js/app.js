@@ -1,7 +1,7 @@
 /*
   Arquivo: js/app.js
-  Versão: 2.0.0
-  Sessão: 2 — Cadastro, login e pendente
+  Versão: 2.1.0
+  Sessão: 3 — Painel master (liga js/master.js; tela #diagnostico removida)
   Data: 14/10/2026
   Coração do app: estado global, roteador, toast, menu e tema.
   Sessão 2: telas reais de boas-vindas, entrar, cadastro, recuperar senha,
@@ -20,7 +20,7 @@
   Rotas sem login:          #boasvindas #entrar #cadastro #recuperar
   Situação da conta:        #pendente #recusado #bloqueado (+ #problema, extra da S2)
   Para qualquer logado:     #contato
-  Livres (sempre abrem):    #termos (#termos/privacidade, #termos/sobre), #diagnostico (TEMPORÁRIA)
+  Livres (sempre abrem):    #termos (#termos/privacidade, #termos/sobre)
 
   Quem vai para onde (o roteador decide sozinho):
     sem login            -> boas-vindas na primeira vez, depois Entrar
@@ -33,9 +33,9 @@
   por exemplo:  clientes: { ..., carregar: () => import('./clientes.js') }
 */
 
-import { app, auth, db, fs, fa, modoCache, VERSAO_FIREBASE } from './firebase.js';
+import { auth, db, fs, fa } from './firebase.js';
 import * as utils from './utils.js';
-import { iniciarUso, pararUso, gravarUsoAgora } from './uso.js';
+import { iniciarUso, pararUso } from './uso.js';
 import { jaViuBoasVindas } from './boasvindas.js';
 import { garantirDocumento, sair, telaEntrar, telaCadastro, telaRecuperar } from './auth.js';
 import { rodapeLegal } from './textos.js';
@@ -113,7 +113,7 @@ const perfilProvisorio = {
   soDeslogado: só abre sem login (boas-vindas, entrar, cadastro, recuperar)
   situacao:    tela da situação da conta (pendente, recusado, bloqueado, problema)
   logado:      abre para qualquer usuário logado com cadastro (contato)
-  livre:       abre sempre (termos, diagnóstico)
+  livre:       abre sempre (termos)
 */
 const TELAS = {
   inicio:      { titulo: 'Início',    protegida: true, carregar: async () => provisoria('Início', 'Tela provisória. A tela inicial chega na Sessão 5.') },
@@ -121,7 +121,7 @@ const TELAS = {
   orcamento:   { titulo: 'Orçamento', protegida: true, carregar: async () => provisoria('Novo orçamento', 'Tela provisória. Chega na Sessão 6.') },
   historico:   { titulo: 'Histórico', protegida: true, carregar: async () => provisoria('Histórico', 'Tela provisória. Chega na Sessão 6.') },
   perfil:      { titulo: 'Perfil',    protegida: true, carregar: async () => perfilProvisorio },
-  master:      { titulo: 'Master',    protegida: true, admin: true, carregar: async () => provisoria('Painel master', 'Tela provisória. Chega na Sessão 3.') },
+  master:      { titulo: 'Painel master', protegida: true, admin: true, carregar: () => import('./master.js') },
 
   boasvindas:  { titulo: 'Boas-vindas',     soDeslogado: true, carregar: () => import('./boasvindas.js') },
   entrar:      { titulo: 'Entrar',          soDeslogado: true, carregar: async () => telaEntrar },
@@ -134,8 +134,7 @@ const TELAS = {
   problema:    { titulo: 'Sua conta',             situacao: true, carregar: async () => (await import('./status.js')).telaProblema },
 
   contato:     { titulo: 'Falar com a equipe', logado: true, carregar: () => import('./contato.js') },
-  termos:      { titulo: 'Termos e privacidade', livre: true, carregar: () => import('./textos.js') },
-  diagnostico: { titulo: 'Diagnóstico', livre: true, carregar: async () => telaDiagnostico } // TEMPORÁRIA
+  termos:      { titulo: 'Termos e privacidade', livre: true, carregar: () => import('./textos.js') }
 };
 
 const MENU = [
@@ -371,186 +370,7 @@ export async function recarregarUsuario() {
 }
 
 /* ============================================================
-   8. Tela de DIAGNÓSTICO (TEMPORÁRIA — Sessão 1)
-   Mostra se o Firebase, o login, a leitura de config/app e a
-   gravação de uso estão funcionando. Remover quando não precisar mais.
-   ============================================================ */
-const telaDiagnostico = {
-  _vivo: false,
-
-  async montar(el) {
-    this._vivo = true;
-    const user = auth.currentUser;
-    let emailSalvo = '';
-    try { emailSalvo = localStorage.getItem('print.email') || ''; } catch (e) { /* ignora */ }
-
-    el.classList.add('larga');
-    el.innerHTML =
-      '<h1>Diagnóstico</h1>' +
-      '<p class="muted">Tela temporária da Sessão 1 para conferir a base do app.</p>' +
-      (user
-        ? '<div class="card"><b>Logado como</b><p class="muted">' + esc(user.email || '') + '</p>' +
-          '<button class="big js-sair" type="button">Sair</button></div>'
-        : '<form class="card js-login" autocomplete="off">' +
-          '<b>Entrar com o usuário de teste</b>' +
-          '<label for="d-email">E-mail</label>' +
-          '<input id="d-email" name="email" type="email" inputmode="email" autocomplete="email" value="' + esc(emailSalvo) + '" required>' +
-          '<label for="d-senha">Senha</label>' +
-          '<input id="d-senha" name="senha" type="password" autocomplete="off" required>' +
-          '<button class="big primary js-entrar" type="submit" style="margin-top:14px">Entrar</button>' +
-          '</form>') +
-      '<div class="card"><ul class="diag-lista">' +
-      ['firebase', 'login', 'usuario', 'admin', 'config', 'uso']
-        .map(k => '<li class="diag-item" data-k="' + k + '"><span class="diag-sinal">…</span><div><b></b><div class="diag-det"></div></div></li>')
-        .join('') +
-      '</ul></div>' +
-      '<button class="big js-rodar" type="button">Conferir de novo</button>';
-
-    el.querySelector('.js-login')?.addEventListener('submit', ev => this.entrar(ev, el));
-    el.querySelector('.js-sair')?.addEventListener('click', () => this.sair());
-    el.querySelector('.js-rodar').addEventListener('click', () => this.conferir(el));
-    el.addEventListener('click', ev => {
-      const b = ev.target.closest('.js-copiar');
-      if (!b) return;
-      navigator.clipboard?.writeText(b.dataset.txt)
-        .then(() => toast('UID copiado', 'ok'))
-        .catch(() => toast('Não deu para copiar. Selecione e copie à mão.', 'erro'));
-    });
-    await this.conferir(el);
-  },
-
-  desmontar() { this._vivo = false; },
-
-  marcar(el, k, sinal, titulo, detalhe) {
-    const li = el.querySelector('[data-k="' + k + '"]');
-    if (!li) return;
-    li.classList.remove('ok', 'falha');
-    if (sinal === 'ok') li.classList.add('ok');
-    if (sinal === 'falha') li.classList.add('falha');
-    li.querySelector('.diag-sinal').textContent = sinal === 'ok' ? '✓' : sinal === 'falha' ? '✕' : sinal === 'info' ? 'i' : '…';
-    li.querySelector('b').textContent = titulo;
-    li.querySelector('.diag-det').innerHTML = detalhe || '';
-  },
-
-  async conferir(el) {
-    const m = (...a) => this._vivo && this.marcar(el, ...a);
-    const user = auth.currentUser;
-
-    // 1. Firebase iniciado
-    const pid = app?.options?.projectId;
-    m('firebase', pid ? 'ok' : 'falha', 'Firebase iniciado',
-      pid ? 'Projeto <span class="codigo">' + esc(pid) + '</span> · biblioteca ' + esc(VERSAO_FIREBASE) +
-        ' · offline: ' + (modoCache === 'persistente' ? 'ligado' : 'desligado (navegador sem suporte)')
-          : 'Configuração não carregou.');
-
-    // 2. Usuário logado
-    if (!user) {
-      m('login', 'falha', 'Usuário logado', 'Ninguém logado. Entre com o usuário de teste acima.');
-      ['usuario', 'admin', 'config', 'uso'].forEach(k => m(k, '', ({
-        usuario: 'Documento do usuário', admin: 'Administrador', config: 'Leitura de config/app', uso: 'Gravação de uso'
-      })[k], 'Aguardando login.'));
-      return;
-    }
-    m('login', 'ok', 'Usuário logado',
-      esc(user.email || '') + '<br>UID: <span class="codigo">' + esc(user.uid) + '</span> ' +
-      '<button class="save js-copiar" type="button" data-txt="' + esc(user.uid) + '">Copiar UID</button>');
-
-    // 3. Documento users/{uid}
-    const u = estado.usuario;
-    if (!u) {
-      m('usuario', 'falha', 'Documento do usuário', 'Não existe <span class="codigo">users/' + esc(user.uid) + '</span> (ou não deu para ler). Crie no console (passo c).');
-    } else {
-      const ok = u.status === 'ativo';
-      m('usuario', ok ? 'ok' : 'falha', 'Documento do usuário',
-        'Nome: ' + esc(u.nome || '—') + ' · status: <b>' + esc(u.status || '—') + '</b> · plano: ' + esc(u.plano || '—') +
-        ' · plano efetivo: ' + esc(estado.planoEfetivo) + (ok ? '' : '<br>Para a coleta de uso rodar, o status precisa ser "ativo".'));
-    }
-
-    // 4. Administrador
-    m('admin', estado.ehAdmin ? 'ok' : 'info', 'Administrador',
-      estado.ehAdmin ? 'Sim, este usuário está em admins.' : 'Não (normal para usuário comum).');
-
-    // 5. Leitura de config/app (direto do servidor)
-    m('config', '', 'Leitura de config/app', 'Lendo…');
-    try {
-      const s = await comPrazo(fs.getDocFromServer(fs.doc(db, 'config', 'app')), 15000);
-      if (!s.exists()) {
-        m('config', 'falha', 'Leitura de config/app', 'O documento <span class="codigo">config/app</span> não existe. Crie no console (passo c).');
-      } else {
-        const c = s.data();
-        m('config', 'ok', 'Leitura de config/app',
-          'liberacaoAutomatica: ' + esc(String(c.liberacaoAutomatica)) +
-          ' · diasTesteProPadrao: ' + esc(String(c.diasTesteProPadrao)) +
-          '<br>mensagemPendente: ' + esc(c.mensagemPendente ?? '—'));
-      }
-    } catch (e) {
-      m('config', 'falha', 'Leitura de config/app', esc(utils.traduzErro(e)));
-    }
-
-    // 6. Gravação de uso
-    if (u?.status !== 'ativo') {
-      m('uso', 'falha', 'Gravação de uso', 'Só grava para usuário com status "ativo".');
-      return;
-    }
-    m('uso', '', 'Gravação de uso', 'Gravando…');
-    try {
-      await comPrazo(gravarUsoAgora(), 15000);
-      const hoje = utils.hojeISO();
-      const s = await comPrazo(fs.getDocFromServer(fs.doc(db, 'uso', user.uid, 'dias', hoje)), 15000);
-      if (!s.exists()) throw new Error('Gravou, mas o documento do dia não apareceu.');
-      const d = s.data();
-      m('uso', 'ok', 'Gravação de uso',
-        'Documento <span class="codigo">uso/…/dias/' + esc(hoje) + '</span>: ' +
-        'aberturas ' + esc(String(d.aberturas ?? 0)) +
-        ' · segundos ativos ' + esc(String(d.segundosAtivos ?? 0)) +
-        ' · orçamentos ' + esc(String(d.orcamentosCriados ?? 0)) +
-        ' · valor ' + esc(utils.moeda(d.valorOrcado ?? 0)));
-    } catch (e) {
-      m('uso', 'falha', 'Gravação de uso', esc(e?.code ? utils.traduzErro(e) : (e?.message || String(e))));
-    }
-  },
-
-  async entrar(ev, el) {
-    ev.preventDefault();
-    const f = ev.target;
-    const email = f.email.value.trim();
-    const senha = f.senha.value;
-    const btn = el.querySelector('.js-entrar');
-    btn.disabled = true;
-    btn.textContent = 'Entrando…';
-    try {
-      await fa.signInWithEmailAndPassword(auth, email, senha);
-      try { localStorage.setItem('print.email', email); } catch (e) { /* ignora */ }
-      toast('Entrou!', 'ok');
-      // onAuthStateChanged redesenha a tela
-    } catch (e) {
-      toast(utils.traduzErro(e), 'erro');
-      btn.disabled = false;
-      btn.textContent = 'Entrar';
-    }
-  },
-
-  async sair() {
-    try {
-      await pararUso();
-      await fa.signOut(auth);
-      toast('Você saiu.', 'ok');
-    } catch (e) {
-      toast(utils.traduzErro(e), 'erro');
-    }
-  }
-};
-
-/** Desiste de esperar depois de ms (o Firestore offline pode esperar para sempre). */
-function comPrazo(promessa, ms) {
-  return Promise.race([
-    promessa,
-    new Promise((_, rej) => setTimeout(() => rej(new Error('Sem resposta do servidor em ' + ms / 1000 + ' s. Confira a internet.')), ms))
-  ]);
-}
-
-/* ============================================================
-   9. Partida
+   8. Partida
    ============================================================ */
 function iniciar() {
   aplicarTema(lerTema());

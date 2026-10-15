@@ -1,7 +1,7 @@
 /*
   Arquivo: style.css
-  Versão: 1.1.0
-  Sessão: 2 — Cadastro, login e pendente
+  Versão: 1.2.0
+  Sessão: 3 — Painel master (seção 13; estilos do diagnóstico removidos)
   Data: 14/10/2026
   Visual do Print, copiado do protótipo (prototipo-orcamento-pintor.html).
   Regras da casa: sem CSS por ID, sem !important, alvos de toque com pelo menos 48 px.
@@ -394,26 +394,7 @@ textarea {
   .toast { transition: none; }
 }
 
-/* ---------- 5. Tela de diagnóstico (temporária, Sessão 1) ---------- */
-.diag-lista { list-style: none; margin: 0; padding: 0; }
-.diag-item { display: flex; gap: 12px; align-items: flex-start; padding: 12px 0; border-bottom: 1px solid var(--line); }
-.diag-item:last-child { border-bottom: 0; }
-.diag-sinal {
-  flex: none;
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 800;
-  background: var(--soft);
-  color: var(--muted);
-}
-.diag-item.ok .diag-sinal { background: var(--ok-soft); color: var(--ok); }
-.diag-item.falha .diag-sinal { background: var(--erro-soft); color: var(--erro); }
-.diag-item > div > b { display: block; } /* S2: só o título; o <b> do detalhe (ex.: "ativo") fica na linha */
-.diag-det { font-size: 13px; color: var(--muted); word-break: break-word; }
+/* ---------- 5. Código (texto em fonte fixa) ---------- */
 .codigo { font-family: ui-monospace, Consolas, monospace; font-size: 13px; background: var(--soft); padding: 2px 6px; border-radius: 6px; word-break: break-all; }
 
 /* ---------- 6. Diversos ---------- */
@@ -545,3 +526,175 @@ a { color: var(--brand); }
 }
 .rodape-legal { margin-top: 28px; text-align: center; font-size: 14px; color: var(--muted); }
 .rodape-legal a { display: inline-flex; align-items: center; min-height: var(--toque); padding: 0 6px; }
+
+/* ---------- 13. Painel master — Sessão 3 ---------- */
+.mt-oculto { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* Abas do painel (fixas no alto ao rolar) */
+.mt-abas {
+  position: sticky;
+  top: var(--topo-h);
+  z-index: 2;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+  margin: 8px -16px 10px;
+  padding: 6px 12px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+}
+@media (min-width: 900px) { .mt-abas { top: 0; margin: 8px 0 12px; padding: 6px 0; } }
+.mt-aba {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 56px;
+  padding: 4px 2px;
+  border: 1.5px solid transparent;
+  border-radius: 12px;
+  background: none;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+.mt-aba .ic { font-size: 20px; line-height: 1; }
+.mt-aba.on { color: var(--brand); background: var(--soft); border-color: var(--line); }
+.mt-badge {
+  position: absolute;
+  top: 2px;
+  right: 6px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 10px;
+  background: var(--erro);
+  color: #fff;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 800;
+  line-height: 20px;
+  text-align: center;
+}
+.mt-badge[hidden] { display: none; }
+
+/* Filtros (usam o estilo .qk do protótipo) */
+.mt-filtros { margin: 10px 0 14px; }
+.mt-filtros button.on, .mt-tags button.on { background: var(--brand); border-color: var(--brand); color: var(--onbrand); }
+
+/* Cartão de usuário / pedido */
+.mu-cab { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.mu-cab > b { font-size: 17px; line-height: 1.3; }
+.mu-selos { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 4px; }
+.mu-info { font-size: 14px; color: var(--muted); margin: 6px 0 10px; line-height: 1.5; }
+.mu-info b { color: var(--ink); }
+.mu-acoes { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.selo {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  padding: 3px 9px;
+  border-radius: 20px;
+  background: var(--soft);
+  font-size: 12.5px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+.st-ativo { background: var(--ok-soft); color: var(--ok); }
+.st-pendente { background: #fff2cc; color: #7a5200; }
+.st-recusado, .st-bloqueado { background: var(--erro-soft); color: var(--erro); }
+.pl-pro { background: var(--brand); color: var(--onbrand); }
+.pl-free { color: var(--muted); }
+.pl-parceiro { background: var(--star); color: #1b1b1b; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .st-pendente { background: #3a2e0f; color: #ffd27a; }
+}
+:root[data-theme="dark"] .st-pendente { background: #3a2e0f; color: #ffd27a; }
+
+/* Botão médio (48 px) */
+.mt-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: var(--toque);
+  padding: 0 12px;
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  background: var(--card);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 650;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.mt-btn:disabled { opacity: .55; }
+.mt-btn.zap { border-color: #25a85a; color: #1a7f4b; }
+.mt-btn.desligado { color: var(--muted); opacity: .7; }
+.mt-btn.pequeno-btn { flex: none; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .mt-btn.zap { color: #4cc98a; }
+}
+:root[data-theme="dark"] .mt-btn.zap { color: #4cc98a; }
+
+/* Liberar / Recusar lado a lado (Liberar ocupa 2/3, para o polegar acertar fácil) */
+.mt-duplo { display: grid; grid-template-columns: 2fr 1fr; gap: 8px; margin: 4px 0 2px; }
+.mt-duplo .big { margin-bottom: 0; justify-content: center; text-align: center; }
+.mt-liberar { background: var(--ok); border-color: var(--ok); color: #fff; }
+.mt-recusar { color: var(--erro); }
+
+.mt-vazio { color: var(--muted); text-align: center; }
+.mt-alerta { border-color: var(--erro); background: var(--erro-soft); }
+.mt-alerta b { display: block; margin-bottom: 6px; }
+.mt-alerta .big { margin-top: 10px; }
+
+/* Pedidos */
+.mp-msg { white-space: pre-wrap; word-break: break-word; background: var(--soft); border-radius: 10px; padding: 10px 12px; margin: 8px 0; }
+.mp-status { margin: 8px 0 0; }
+.mp-status button { font-size: 14px; }
+.mt-repetido { color: var(--erro); font-weight: 650; }
+
+/* Relatório de uso */
+.mt-barra-uso { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
+.mt-barra-uso p { margin: 0; }
+.mt-barra-uso .mt-btn { flex: none; }
+.mt-chamar { border-color: var(--brand); }
+.mt-pos { color: var(--brand); }
+.mt-tira { display: grid; grid-template-columns: repeat(14, 1fr); gap: 3px; margin: 10px 0 8px; }
+.mt-tira i { height: 14px; border-radius: 3px; background: var(--line); }
+.mt-tira i.n1 { background: color-mix(in srgb, var(--brand) 35%, var(--line)); }
+.mt-tira i.n2 { background: color-mix(in srgb, var(--brand) 65%, var(--line)); }
+.mt-tira i.n3 { background: var(--brand); }
+.mt-nums { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 6px 0 8px; }
+.mt-nums div:last-child { grid-column: 1 / -1; }
+.mt-nums div { background: var(--soft); border-radius: 10px; padding: 8px 6px; text-align: center; min-width: 0; }
+.mt-nums b { display: block; font-size: 16px; overflow-wrap: anywhere; }
+.mt-nums span { display: block; font-size: 11.5px; color: var(--muted); }
+.mt-linha { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.mt-linha:last-child { border-bottom: 0; }
+.mt-linha .selo { margin-left: 6px; }
+
+/* Folhas (sheet) do painel */
+.mt-folha .sheet h2.folha-tit { margin: 4px 0 6px; font-size: 20px; }
+.mt-folha .rotulo { margin-top: 16px; }
+.mt-folha .big { justify-content: center; }
+.mt-tag-nova { display: flex; gap: 8px; }
+.mt-tag-nova input { flex: 1; }
+.mt-tag-nova .mt-btn { flex: none; }
+.mt-parceiro { margin-top: 16px; border-color: var(--star); }
+.mt-parceiro b { display: block; margin-bottom: 6px; }
+.mt-codigo { font-size: 20px; font-weight: 800; letter-spacing: .12em; }
+
+/* Zona de cuidado (Ativar teste Pro para todos) */
+.mt-perigo { border-color: var(--erro); }
+.mt-perigo > b { display: block; margin-bottom: 8px; color: var(--erro); }
+.big.mt-btn-contorno { border-color: var(--erro); color: var(--erro); }
+.big.mt-btn-perigo { background: var(--erro); border-color: var(--erro); color: #fff; justify-content: center; }
+
+/* Termos: campo ainda não preenchido no painel */
+.preencher { background: var(--erro-soft); color: var(--erro); font-weight: 650; padding: 0 4px; border-radius: 4px; }
