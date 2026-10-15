@@ -1,17 +1,19 @@
 /*
   Arquivo: js/master.js
-  Versão: 1.0.0
-  Sessão: 3 — Painel master
-  Data: 14/10/2026
+  Versão: 1.1.0
+  Sessão: 3B — Liberação automática com espera (1.0.0 era da Sessão 3)
+  Data: 15/10/2026
   Painel do dono (só para quem está em admins/{uid}). Pensado para o celular, com uma mão.
 
   Abas:
-    Usuários  pendentes no topo (Liberar / Recusar), busca, filtro por status,
-              ações: bloquear, reativar, mudar plano, estender o Pro, notas
+    Usuários  pendentes no topo (Liberar / Recusar), busca, filtro por status
+              e "Liberados hoje", selo auto/manual, ações: bloquear, reativar,
+              mudar plano, estender o Pro, notas
     Pedidos   pedidos de contato (novo, atendido, parceiro), WhatsApp, notas
     Uso       relatório dos últimos 14 dias, ranking e "Quem chamar hoje"
     Empresa   dados da empresa (config/empresa), mostrados nos Termos
-    Ajustes   mensagemPendente, diasTesteProPadrao e "Ativar teste Pro para todos"
+    Ajustes   chave Liberação automática (com os minutos), mensagemPendente,
+              diasTesteProPadrao e "Ativar teste Pro para todos"
 
   O painel lê SÓ: users, resumos, uso (collectionGroup 'dias'), pedidosContato,
   masterNotas e config. Nunca lê as subcoleções de users (clientes, orçamentos).
@@ -20,16 +22,18 @@
   Extra:    CRITERIOS (constantes do relatório, fáceis de mudar)
 
   Campos gravados:
-    users/{uid}:        status, liberadoEm, testeProPendente, plano, proAte
+    users/{uid}:        status, liberadoEm, testeProPendente, liberadoPor ('manual'), plano, proAte
     masterNotas/{uid}:  notas, tags, ultimoContato, parceiro, codigo, atualizadoEm
     pedidosContato/{id}: status
-    config/app:         mensagemPendente, diasTesteProPadrao
+    config/app:         mensagemPendente, diasTesteProPadrao,
+                        liberacaoAutomatica, autoMinutosMin, autoMinutosMax (1.1.0)
     config/empresa:     nome, cnpj, endereco, responsavelDados, email, telefone, atualizadoEm
   Nunca grava users/{uid}.codigoParceiro (é a indicação digitada pelo pintor).
 */
 
 import { db, fs } from './firebase.js';
 import { formatarWhats } from './auth.js';
+import { segundosDaVez, lerMinutos } from './status.js'; // 1.1.0: mesmo sorteio do aparelho do pintor
 
 /* ============================================================
    1. Critérios do relatório (mude aqui quando quiser)
@@ -78,6 +82,7 @@ function novoEstado(el, ctx) {
     users: new Map(),     // uid -> dados
     notas: new Map(),     // uid -> masterNotas
     pedidos: [],          // [{ id, ...dados }]
+    config: null,         // config/app (ao vivo, 1.1.0)
     prontos: { users: false, notas: false, pedidos: false },
     erroLista: null,
     filtro: 'todos',
@@ -284,6 +289,12 @@ function assinar() {
     S.prontos.pedidos = true;
     agendar();
   }, erro('pedidos')));
+  // 1.1.0: config/app ao vivo (chave da liberação automática e minutos)
+  S.unsubs.push(fs.onSnapshot(fs.doc(db, 'config', 'app'), snap => {
+    if (!S) return;
+    S.config = snap.exists() ? snap.data() : {};
+    agendar();
+  }, e => console.warn('[Print] painel config/app', e)));
 }
 
 /** Junta várias mudanças seguidas num redesenho só. */
@@ -329,7 +340,7 @@ function desenharAba() {
       '<label class="mt-oculto" for="mt-busca">Buscar por nome</label>' +
       '<input id="mt-busca" class="js-busca" type="search" placeholder="🔍 Buscar por nome, cidade ou WhatsApp" autocomplete="off" value="' + esc(S.busca) + '">' +
       '<div class="qk mt-filtros" role="group" aria-label="Filtrar por status">' +
-        [['todos', 'Todos'], ['ativo', 'Ativos'], ['pendente', 'Pendentes'], ['bloqueado', 'Bloqueados'], ['recusado', 'Recusados']]
+        [['todos', 'Todos'], ['hoje', 'Liberados hoje'], ['ativo', 'Ativos'], ['pendente', 'Pendentes'], ['bloqueado', 'Bloqueados'], ['recusado', 'Recusados']]
           .map(([k, n]) => '<button type="button" data-filtro="' + k + '" class="' + (S.filtro === k ? 'on' : '') + '" aria-pressed="' + (S.filtro === k) + '">' + n + '</button>').join('') +
       '</div>' +
       '<div class="js-lista"></div>';
@@ -361,6 +372,7 @@ function atualizarAba() {
   else if (S.aba === 'ajustes') {
     const q = S.el.querySelector('.js-qtd-teste');
     if (q) q.textContent = String(contarTestePendente());
+    atualizarChaveAuto();
   }
 }
 
@@ -397,18 +409,44 @@ function atualizarUsuarios() {
   // Lista com busca e filtro
   const termo = normalizar(S.busca);
   const digitos = soDigitos(S.busca);
+  const hoje = U().dataBR(new Date());
   let lista2 = todos.filter(u => {
     const st = u.status || 'pendente';
     if (S.filtro === 'todos') { if (mostrarPend && st === 'pendente') return false; }
+    else if (S.filtro === 'hoje') { if (!u.liberadoEm || U().dataBR(u.liberadoEm) !== hoje) return false; } // 1.1.0
     else if (st !== S.filtro) return false;
     if (!termo) return true;
     return normalizar(u.nome).includes(termo) || normalizar(u.cidade).includes(termo) ||
       normalizar(u.email).includes(termo) || (digitos.length >= 3 && soDigitos(u.whatsapp).includes(digitos));
-  }).sort(porData);
+  }).sort(S.filtro === 'hoje'
+    ? (a, b) => (U().paraData(b.liberadoEm)?.getTime() || 0) - (U().paraData(a.liberadoEm)?.getTime() || 0)
+    : porData);
 
-  lista.innerHTML = lista2.length
+  const dicaHoje = S.filtro === 'hoje'
+    ? '<p class="campo-ajuda">Confira quem entrou hoje. Se não for profissional, toque em ⋯ Ações e em Bloquear acesso.</p>' : '';
+  lista.innerHTML = dicaHoje + (lista2.length
     ? '<p class="muted pequeno">' + lista2.length + (lista2.length === 1 ? ' usuário' : ' usuários') + '</p>' + lista2.map(cartaoUsuario).join('')
-    : '<div class="card mt-vazio">Ninguém encontrado.</div>';
+    : '<div class="card mt-vazio">' + (S.filtro === 'hoje' ? 'Ninguém foi liberado hoje.' : 'Ninguém encontrado.') + '</div>');
+}
+
+/* 1.1.0: selo "auto" ou "manual" (pelo liberadoPor). Antigos, sem o campo, ficam sem selo. */
+function seloLiberacao(u) {
+  if (u.liberadoPor === 'auto') return '<span class="selo pl-free">⚡ auto</span>';
+  if (u.liberadoPor === 'manual') return '<span class="selo pl-free">✋ manual</span>';
+  return '';
+}
+
+/* 1.1.0: com a chave ligada, quando o pendente entra sozinho. */
+function linhaAuto(u) {
+  if (S.config?.liberacaoAutomatica !== true) return '';
+  const criado = U().paraData(u.criadoEm);
+  if (!criado) return '';
+  const { min, max } = lerMinutos(S.config);
+  const hora = new Date(criado.getTime() + segundosDaVez(u.uid, min, max) * 1000);
+  const txt = hora.getTime() > Date.now()
+    ? 'entra sozinho por volta das ' + hora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+    : 'entra sozinho quando abrir o app';
+  return '<br>⚡ ' + esc(txt) + ' (dá para liberar ou recusar antes)';
 }
 
 function normalizar(s) {
@@ -433,9 +471,11 @@ function cartaoUsuario(u) {
   return '<article class="card mu">' +
     '<div class="mu-cab"><b>' + esc(u.nome || 'Sem nome') + (voce ? ' <span class="muted">(você)</span>' : '') + '</b>' +
       seloStatus(st) + '</div>' +
-    '<div class="mu-selos">' + seloPlano(u) + seloParceiro(u.uid) + '</div>' +
+    '<div class="mu-selos">' + seloPlano(u) + seloLiberacao(u) + seloParceiro(u.uid) + '</div>' +
     '<p class="mu-info">' + linhaZap + (u.cidade ? ' · ' + esc(u.cidade) : '') + '<br>' +
-      'Cadastro: ' + esc(U().dataBR(u.criadoEm) || '—') + indicacao + '</p>' +
+      'Cadastro: ' + esc(U().dataBR(u.criadoEm) || '—') + indicacao +
+      (st !== 'pendente' && u.liberadoEm ? '<br>Liberado: ' + esc(dataHora(u.liberadoEm)) : '') +
+      (st === 'pendente' ? linhaAuto(u) : '') + '</p>' +
     principais +
     '<div class="mu-acoes">' +
       botaoZap(u.whatsapp, u.nome) +
@@ -708,7 +748,25 @@ async function desenharAjustes(box) {
   }
   if (!S || S.aba !== 'ajustes') return;
   S.config = c;
+  const { min, max } = lerMinutos(c);
   box.innerHTML =
+    // 1.1.0: chave da liberação automática
+    '<div class="card">' +
+      '<b>⚡ Liberação automática</b>' +
+      '<div class="seg js-chave-auto" role="group" aria-label="Liberação automática">' +
+        '<button type="button" data-acao="auto-chave" data-v="0">Desligada</button>' +
+        '<button type="button" data-acao="auto-chave" data-v="1">Ligada</button>' +
+      '</div>' +
+      '<p class="campo-ajuda js-auto-txt"></p>' +
+      '<form class="js-form-auto" novalidate>' +
+        '<label for="aj-min">Liberar depois de (mínimo, em minutos)</label>' +
+        '<input id="aj-min" name="autoMinutosMin" type="number" inputmode="numeric" min="1" max="120" value="' + min + '">' +
+        '<label for="aj-max">Até (máximo, em minutos)</label>' +
+        '<input id="aj-max" name="autoMinutosMax" type="number" inputmode="numeric" min="1" max="120" value="' + max + '">' +
+        '<p class="campo-ajuda">Cada pessoa recebe um tempo entre o mínimo e o máximo (sempre o mesmo para ela), contado do cadastro. Assim não parece automático.</p>' +
+        '<button type="submit" class="big" style="margin-top:14px">Salvar minutos</button>' +
+      '</form>' +
+    '</div>' +
     '<form class="card js-form-ajustes" novalidate>' +
       '<b>Mensagem e teste Pro</b>' +
       '<label for="aj-msg">Mensagem para quem está aguardando liberação</label>' +
@@ -716,7 +774,6 @@ async function desenharAjustes(box) {
       '<label for="aj-dias">Dias de teste Pro (padrão)</label>' +
       '<input id="aj-dias" name="diasTesteProPadrao" type="number" inputmode="numeric" min="1" max="365" value="' + esc(String(c.diasTesteProPadrao ?? 60)) + '">' +
       '<p class="campo-ajuda">Usado no botão abaixo e quando você muda alguém para Teste Pro.</p>' +
-      '<p class="campo-ajuda">Liberação automática: <b>' + (c.liberacaoAutomatica ? 'ligada' : 'desligada') + '</b> (a liberação é sempre manual no piloto).</p>' +
       '<button type="submit" class="big primary" style="margin-top:14px">Salvar ajustes</button>' +
     '</form>' +
     '<div class="card mt-perigo">' +
@@ -725,6 +782,46 @@ async function desenharAjustes(box) {
       '<p>Quem está esperando o teste: <b class="js-qtd-teste">' + contarTestePendente() + '</b> pessoa(s). Elas passam para Teste Pro até hoje + os dias de teste acima.</p>' +
       '<button type="button" class="big mt-btn-perigo" data-acao="ativar-teste">Ativar teste Pro para todos</button>' +
     '</div>';
+  atualizarChaveAuto();
+}
+
+/* 1.1.0: mostra a chave como está em config/app. */
+function atualizarChaveAuto() {
+  const box = S?.el.querySelector('.js-chave-auto');
+  if (!box) return;
+  const ligada = S.config?.liberacaoAutomatica === true;
+  box.querySelectorAll('button').forEach(b => {
+    const on = (b.dataset.v === '1') === ligada;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-pressed', String(on));
+  });
+  const { min, max } = lerMinutos(S.config || {});
+  const t = S.el.querySelector('.js-auto-txt');
+  if (t) t.innerHTML = ligada
+    ? '<b>Ligada:</b> cadastros novos entram sozinhos entre ' + min + ' e ' + max + ' minutos depois do cadastro (ou na próxima vez que a pessoa abrir o app). Você continua podendo liberar ou recusar antes. <b>Quem já está pendente também entra sozinho</b> quando abrir o app: recuse antes quem você não quer.'
+    : '<b>Desligada:</b> todo cadastro espera você tocar em Liberar.';
+}
+
+async function mudarChaveAuto(ligar, botao) {
+  if ((S.config?.liberacaoAutomatica === true) === ligar) return;
+  botao.disabled = true;
+  const ok = await gravar(fs.setDoc(fs.doc(db, 'config', 'app'), { liberacaoAutomatica: ligar }, { merge: true }),
+    ligar ? 'Liberação automática ligada ⚡' : 'Liberação automática desligada');
+  if (ok && S) { S.config = { ...S.config, liberacaoAutomatica: ligar }; atualizarChaveAuto(); }
+  botao.disabled = false;
+}
+
+async function salvarMinutos(f) {
+  const min = Math.round(U().num(f.elements.autoMinutosMin.value));
+  const max = Math.round(U().num(f.elements.autoMinutosMax.value));
+  if (min < 1 || min > 120) { toast('O mínimo precisa ficar entre 1 e 120 minutos.', 'erro'); f.elements.autoMinutosMin.focus(); return; }
+  if (max < min || max > 120) { toast('O máximo precisa ser igual ou maior que o mínimo (até 120).', 'erro'); f.elements.autoMinutosMax.focus(); return; }
+  const b = f.querySelector('[type=submit]');
+  b.disabled = true;
+  const ok = await gravar(fs.setDoc(fs.doc(db, 'config', 'app'), { autoMinutosMin: min, autoMinutosMax: max }, { merge: true }),
+    'Minutos salvos: de ' + min + ' a ' + max);
+  if (ok && S) { S.config = { ...S.config, autoMinutosMin: min, autoMinutosMax: max }; atualizarChaveAuto(); }
+  b.disabled = false;
 }
 
 async function salvarAjustes(f) {
@@ -800,7 +897,7 @@ async function mudarUsuario(uid, campos, msgOk) {
 }
 
 function camposLiberar() {
-  return { status: 'ativo', liberadoEm: fs.serverTimestamp(), testeProPendente: true };
+  return { status: 'ativo', liberadoEm: fs.serverTimestamp(), testeProPendente: true, liberadoPor: 'manual' }; // 1.1.0: + liberadoPor
 }
 
 async function liberar(uid, botao) {
@@ -872,7 +969,7 @@ function abrirAcoes(uid) {
     const bloquear = st === 'ativo' && !voce ? '<button type="button" class="big mt-btn-contorno" data-f="bloquear">🔒 Bloquear acesso</button>' : '';
     const temPro = u.plano === 'pro' || u.plano === 'teste_pro';
     return '<h2 class="folha-tit">' + esc(u.nome || 'Sem nome') + '</h2>' +
-      '<div class="mu-selos">' + seloStatus(st) + seloPlano(u) + seloParceiro(uid) + '</div>' +
+      '<div class="mu-selos">' + seloStatus(st) + seloPlano(u) + seloLiberacao(u) + seloParceiro(uid) + '</div>' +
       status +
       '<p class="rotulo">Plano</p>' +
       '<div class="seg tres" role="group" aria-label="Plano">' +
@@ -1100,6 +1197,7 @@ function aoClicar(ev) {
     }
     case 'atualizar-uso': carregarUso(); break;
     case 'ativar-teste': confirmarTesteParaTodos(); break;
+    case 'auto-chave': mudarChaveAuto(b.dataset.v === '1', b); break; // 1.1.0
   }
 }
 
@@ -1115,6 +1213,7 @@ function aoEnviar(ev) {
   if (!S) return;
   if (ev.target.classList.contains('js-form-empresa')) { ev.preventDefault(); salvarEmpresa(ev.target); }
   else if (ev.target.classList.contains('js-form-ajustes')) { ev.preventDefault(); salvarAjustes(ev.target); }
+  else if (ev.target.classList.contains('js-form-auto')) { ev.preventDefault(); salvarMinutos(ev.target); } // 1.1.0
 }
 
 function aoTecla(ev) {
