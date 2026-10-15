@@ -1,0 +1,14 @@
+/*
+  Arquivo: css/pdf.css
+  Versão: 1.0.0
+  Sessão: 7 — PDF (3 modelos)
+  Data: 15/10/2026
+  Folhas do PDF ("Marcar como Enviado?" e "PDF pronto"). Injetado pelo js/pdf.js.
+  Usa .ov, .sheet, .big e .primary do style.css; aqui só os ajustes (.pdf-).
+*/
+
+.pdf-ov { z-index: 8; }
+.pdf-folha h2 { margin: 4px 0 6px; font-size: 20px; }
+.pdf-folha p { margin: 0 0 16px; }
+.pdf-folha .big { justify-content: center; }
+.pdf-folha .big:last-child { margin-bottom: 0; }
