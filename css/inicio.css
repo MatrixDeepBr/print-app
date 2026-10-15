@@ -1,0 +1,94 @@
+/*
+  Arquivo: css/inicio.css
+  Versão: 1.0.0
+  Sessão: 5 — Início e clientes
+  Data: 15/10/2026
+  Visual da tela inicial (#inicio). Carregado pelo app.js antes de montar a tela.
+  Usa os tokens do style.css. Classes com prefixo .ini-, sem ID e sem !important.
+*/
+
+.ini-ola { font-size: 30px; margin-top: 10px; overflow-wrap: anywhere; }
+
+/* Botão principal enorme */
+.big.ini-novo {
+  min-height: 76px;
+  margin: 16px 0 10px;
+  font-size: 21px;
+  font-weight: 750;
+  border-radius: 18px;
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--brand) 30%, transparent);
+}
+.ini-novo span { font-size: 22px; }
+
+.ini-atalhos .big { min-height: 92px; font-size: 17px; }
+.ini-ic { font-size: 26px; line-height: 1; }
+
+/* Cartão Complete seu perfil */
+.ini-guia { border-color: var(--brand); background: var(--soft); margin-top: 8px; }
+.ini-guia-txt { display: flex; gap: 12px; align-items: flex-start; }
+.ini-guia-ic { font-size: 30px; line-height: 1; flex: none; }
+.ini-guia-txt b { display: block; font-size: 17px; margin-bottom: 2px; }
+.ini-guia-txt p { margin: 0; font-size: 15px; }
+.ini-guia-bts { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+.ini-guia-bts .big { flex: 1; margin: 0; min-height: 50px; font-size: 16px; }
+.ini-guia-bts .link-btn { flex: none; }
+
+/* Últimos orçamentos */
+.ini-orc {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 64px;
+  padding: 10px 14px;
+  margin-bottom: 8px;
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  background: var(--card);
+  text-align: left;
+}
+.ini-orc:hover { border-color: var(--brand); }
+.ini-orc-txt { flex: 1; min-width: 0; }
+.ini-orc-txt b { display: block; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ini-orc-txt small { display: block; font-size: 13px; color: var(--muted); }
+.ini-orc-dir { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex: none; }
+.ini-orc-dir b { font-size: 16px; }
+.ini-st {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 20px;
+  background: var(--soft);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+.ini-st-enviado { color: var(--brand); }
+.ini-st-aprovado { background: var(--ok-soft); color: var(--ok); }
+.ini-st-recusado { background: var(--erro-soft); color: var(--erro); }
+.ini-ver-todos { display: block; margin: 0 0 0 auto; }
+.ini-vazio > b { display: block; margin-bottom: 4px; }
+
+/* Em breve (discreto) */
+.ini-breve { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 26px; }
+.ini-breve-bt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 64px;
+  padding: 6px 4px;
+  border: 1.5px dashed var(--line);
+  border-radius: 12px;
+  background: none;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 600;
+  opacity: .75;
+}
+.ini-breve-bt:disabled { cursor: default; }
+.ini-breve-bt span { font-size: 18px; line-height: 1; filter: grayscale(1); }
+.ini-breve-bt small { font-size: 11px; font-weight: 500; }

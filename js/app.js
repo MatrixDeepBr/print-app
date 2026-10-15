@@ -1,8 +1,13 @@
 /*
   Arquivo: js/app.js
-  Versão: 2.1.0
-  Sessão: 3 — Painel master (liga js/master.js; tela #diagnostico removida)
-  Data: 14/10/2026
+  Versão: 2.2.0
+  Sessão: Maestro (preparação das Sessões 4, 5 e 6 em paralelo)
+  Data: 15/10/2026
+  2.2.0: TELAS já apontam para perfil.js, inicio.js, clientes.js, orcamento.js
+         e historico.js (se o arquivo ainda não existir, mostra a tela provisória);
+         cada tela pode ter CSS próprio em css/{nome}.css (campo "css" em TELAS);
+         atualizarTopo() mostra a logo do pintor (estado.perfil.logo) no topo e no menu.
+         As Sessões 4, 5 e 6 NÃO alteram este arquivo, o style.css nem o index.html.
   Coração do app: estado global, roteador, toast, menu e tema.
   Sessão 2: telas reais de boas-vindas, entrar, cadastro, recuperar senha,
   situação da conta (pendente, recusado, bloqueado), contato e termos.
@@ -86,6 +91,56 @@ function provisoria(titulo, nota) {
 }
 
 /**
+ * 2.2.0: carrega o módulo real da tela; se o arquivo ainda não existir
+ * (sessão não concluída), mostra a tela provisória no lugar.
+ * Sessão 10: trocar por import direto quando todas as telas existirem.
+ */
+function modulo(carregar, reserva) {
+  return async () => {
+    try { return await carregar(); }
+    catch (e) {
+      console.warn('[Print] tela ainda indisponível, usando provisória', e);
+      return reserva;
+    }
+  };
+}
+
+/** 2.2.0: CSS próprio da tela (css/{nome}.css), carregado uma vez só. */
+const cssCarregados = {};
+function carregarCSS(nome) {
+  if (!nome) return Promise.resolve();
+  if (!cssCarregados[nome]) {
+    cssCarregados[nome] = new Promise(ok => {
+      const l = document.createElement('link');
+      l.rel = 'stylesheet';
+      l.href = './css/' + nome + '.css';
+      l.dataset.css = nome;
+      l.onload = l.onerror = () => ok();
+      document.head.appendChild(l);
+      setTimeout(ok, 3000); // nunca trava a tela esperando CSS
+    });
+  }
+  return cssCarregados[nome];
+}
+
+/** 2.2.0: logo do pintor no topo e no menu (volta para o "P" sem logo). */
+function atualizarTopo() {
+  const logo = estado.perfil?.logo;
+  document.querySelectorAll('.topo .marca-logo, .menu-marca .marca-logo').forEach(el => {
+    if (logo && /^data:image\//.test(logo)) {
+      const img = document.createElement('img');
+      img.src = logo;
+      img.alt = '';
+      el.replaceChildren(img);
+      el.style.background = '#fff';
+    } else {
+      el.textContent = 'P';
+      el.style.background = '';
+    }
+  });
+}
+
+/**
  * Perfil PROVISÓRIO (a Sessão 4 faz o perfil real).
  * A Sessão 4 deve manter: botão Falar com a equipe, botão Sair e o rodapé
  * com Termos, Privacidade e Sobre (rodapeLegal() de textos.js).
@@ -116,11 +171,17 @@ const perfilProvisorio = {
   livre:       abre sempre (termos)
 */
 const TELAS = {
-  inicio:      { titulo: 'Início',    protegida: true, carregar: async () => provisoria('Início', 'Tela provisória. A tela inicial chega na Sessão 5.') },
-  clientes:    { titulo: 'Clientes',  protegida: true, carregar: async () => provisoria('Clientes', 'Tela provisória. Chega na Sessão 5.') },
-  orcamento:   { titulo: 'Orçamento', protegida: true, carregar: async () => provisoria('Novo orçamento', 'Tela provisória. Chega na Sessão 6.') },
-  historico:   { titulo: 'Histórico', protegida: true, carregar: async () => provisoria('Histórico', 'Tela provisória. Chega na Sessão 6.') },
-  perfil:      { titulo: 'Perfil',    protegida: true, carregar: async () => perfilProvisorio },
+  // 2.2.0: telas reais das Sessões 4, 5 e 6 (provisória enquanto o arquivo não existir)
+  inicio:      { titulo: 'Início',    protegida: true, css: 'inicio',
+                 carregar: modulo(() => import('./inicio.js'), provisoria('Início', 'Tela provisória. A tela inicial chega na Sessão 5.')) },
+  clientes:    { titulo: 'Clientes',  protegida: true, css: 'clientes',
+                 carregar: modulo(() => import('./clientes.js'), provisoria('Clientes', 'Tela provisória. Chega na Sessão 5.')) },
+  orcamento:   { titulo: 'Orçamento', protegida: true, css: 'orcamento',
+                 carregar: modulo(() => import('./orcamento.js'), provisoria('Novo orçamento', 'Tela provisória. Chega na Sessão 6.')) },
+  historico:   { titulo: 'Histórico', protegida: true, css: 'orcamento',
+                 carregar: modulo(() => import('./historico.js'), provisoria('Histórico', 'Tela provisória. Chega na Sessão 6.')) },
+  perfil:      { titulo: 'Perfil',    protegida: true, css: 'perfil',
+                 carregar: modulo(() => import('./perfil.js'), perfilProvisorio) },
   master:      { titulo: 'Painel master', protegida: true, admin: true, carregar: () => import('./master.js') },
 
   boasvindas:  { titulo: 'Boas-vindas',     soDeslogado: true, carregar: () => import('./boasvindas.js') },
@@ -231,7 +292,7 @@ async function mostrar() {
   const def = TELAS[nome];
   let mod = bloqueioDe(def);
   if (!mod) {
-    try { mod = await def.carregar(); }
+    try { [mod] = await Promise.all([def.carregar(), carregarCSS(def.css)]); }
     catch (e) {
       console.error('[Print] carregar tela', e);
       mod = provisoria('Não deu para abrir esta tela', 'Confira a internet e tente de novo.');
@@ -325,6 +386,7 @@ async function carregarUsuario(user) {
   if (!user) {
     await pararUso();
     Object.assign(estado, { usuario: null, uid: null, ehAdmin: false, planoEfetivo: 'free', perfil: {}, erroUsuario: null });
+    atualizarTopo(); // 2.2.0
     return;
   }
   estado.uid = user.uid;
@@ -353,6 +415,7 @@ async function carregarUsuario(user) {
   }
   estado.planoEfetivo = utils.planoEfetivo(estado.usuario);
   estado.perfil = estado.usuario?.perfil || {};
+  atualizarTopo(); // 2.2.0
 
   if (estado.usuario?.status === 'ativo') iniciarUso(criarCtx());
   else await pararUso();

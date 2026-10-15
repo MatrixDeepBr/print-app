@@ -1,0 +1,147 @@
+/*
+  Arquivo: css/clientes.css
+  Versão: 1.0.0
+  Sessão: 5 — Início e clientes
+  Data: 15/10/2026
+  Visual da tela de clientes (#clientes). Carregado pelo app.js antes de montar a tela.
+  Celular: lista + folha que sobe de baixo. A partir de 900 px: lista e painel lado a lado.
+  Usa os tokens do style.css. Classes com prefixo .cli-, sem ID e sem !important.
+*/
+
+.cli-cab { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.cli-cab .muted { font-size: 14px; white-space: nowrap; }
+
+/* Busca no topo (fica presa ao rolar) */
+.cli-busca {
+  position: sticky;
+  top: var(--topo-h);
+  z-index: 2;
+  margin: 8px -16px 10px;
+  padding: 8px 16px;
+  background: var(--bg);
+}
+.cli-busca input { padding-left: 44px; font-size: 17px; }
+.cli-lupa { position: absolute; left: 30px; top: 50%; transform: translateY(-50%); font-size: 17px; opacity: .7; pointer-events: none; }
+.big.cli-novo { margin-bottom: 14px; }
+
+/* Lista */
+.cli-lista { list-style: none; margin: 0; padding: 0; }
+.cli-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 64px;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  background: var(--card);
+  text-align: left;
+}
+.cli-item:hover { border-color: var(--brand); }
+.cli-item.on { border-color: var(--brand); background: var(--soft); }
+.cli-av {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--soft);
+  color: var(--brand);
+  font-weight: 800;
+  font-size: 18px;
+}
+.cli-item-txt { flex: 1; min-width: 0; }
+.cli-item-txt b, .cli-item-txt small { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cli-item-txt b { font-size: 16px; }
+.cli-item-txt small { font-size: 13px; color: var(--muted); }
+.cli-seta { font-size: 24px; color: var(--muted); flex: none; }
+.cli-vazio > b { display: block; margin-bottom: 4px; }
+.cli-vazio .big { justify-content: center; margin: 10px 0 0; }
+
+/* Painel: no celular é uma folha por cima de tudo */
+.cli-painel { display: none; }
+.cli-painel.aberto {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(0, 0, 0, .45);
+}
+.cli-folha {
+  width: 100%;
+  max-width: 480px;
+  max-height: 92vh;
+  max-height: 92dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 14px 16px calc(18px + env(safe-area-inset-bottom, 0px));
+  border-radius: 18px 18px 0 0;
+  background: var(--card);
+}
+:root.cli-travado body { overflow: hidden; }
+
+.cli-folha-cab { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.cli-folha-cab h2 { margin: 10px 0 6px; font-size: 22px; line-height: 1.25; overflow-wrap: anywhere; }
+.cli-folha-cab .x { flex: none; margin-right: -8px; }
+
+.cli-dados { margin: 4px 0 16px; }
+.cli-dados div { padding: 8px 0; border-bottom: 1px solid var(--line); }
+.cli-dados div:last-child { border-bottom: 0; }
+.cli-dados dt { font-size: 13px; color: var(--muted); font-weight: 600; }
+.cli-dados dd { margin: 2px 0 0; font-size: 17px; overflow-wrap: anywhere; }
+.cli-dados .cli-obs { white-space: pre-wrap; font-size: 15px; }
+
+.cli-folha .big { justify-content: center; }
+.big.cli-zap { border-color: #25a85a; color: #1a7f4b; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .big.cli-zap { color: #4cc98a; }
+}
+:root[data-theme="dark"] .big.cli-zap { color: #4cc98a; }
+.cli-duplo { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.big.cli-excluir { color: var(--erro); }
+
+.cli-form label:first-of-type { margin-top: 6px; }
+.cli-obrig { font-weight: 500; color: var(--muted); }
+.cli-obs-campo { min-height: 90px; }
+.big.cli-salvar { margin-top: 18px; }
+
+.cli-dica { text-align: center; padding: 40px 12px; }
+.cli-dica span { font-size: 40px; display: block; margin-bottom: 8px; }
+
+/* Confirmação (aviso de repetido e excluir) */
+.ov.cli-conf { z-index: 8; }
+.cli-conf .sheet .big { justify-content: center; }
+.cli-conf-tit { margin: 6px 0 10px; font-size: 19px; line-height: 1.3; }
+.cli-parecido b { display: block; font-size: 17px; }
+.big.cli-perigo { background: var(--erro); border-color: var(--erro); color: #fff; }
+
+/* Computador: lista e painel lado a lado */
+@media (min-width: 900px) {
+  .tela.cli-tela { max-width: 1080px; }
+  .cli-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(340px, 420px); gap: 24px; align-items: start; }
+  .cli-busca { top: 0; margin: 8px 0 10px; padding: 8px 0; }
+  .cli-lupa { left: 14px; }
+  .cli-painel, .cli-painel.aberto {
+    position: sticky;
+    top: 24px;
+    inset: auto;
+    z-index: 1;
+    display: block;
+    background: none;
+  }
+  .cli-folha {
+    max-width: none;
+    max-height: calc(100vh - 48px);
+    padding: 14px 18px 18px;
+    border: 1.5px solid var(--line);
+    border-radius: var(--raio);
+  }
+  .cli-painel.aberto .cli-folha { border-color: var(--brand); }
+  :root.cli-travado body { overflow: visible; }
+}
