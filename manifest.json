@@ -1,0 +1,20 @@
+{
+  "_versao": "manifest.json · 1.0.0 · Sessão 9 · 15/10/2026",
+  "id": "./",
+  "name": "Print — Orçamentos e Gestão",
+  "short_name": "Print",
+  "description": "Orçamentos em minutos, com a sua logo, para pintores e profissionais da obra.",
+  "lang": "pt-BR",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "theme_color": "#2447d6",
+  "background_color": "#f3f5f9",
+  "categories": ["business", "productivity"],
+  "icons": [
+    { "src": "./icones/icone-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "./icones/icone-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "./icones/icone-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

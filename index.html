@@ -1,9 +1,12 @@
 <!doctype html>
 <!--
   Arquivo: index.html
-  Versão: 1.1.0
-  Sessão: 2 — Cadastro, login e pendente (menu escondido até saber quem está logado)
-  Data: 14/10/2026
+  Versão: 1.2.0
+  Sessão: 9 — Instalação como app (manifest, ícones, tela cheia no iPhone)
+  Data: 15/10/2026
+  1.2.0: manifest.json, apple-touch-icon, ícone da aba e metas de app instalado.
+         O sw.js é registrado pelo js/app.js. Caminhos sempre relativos (./).
+  1.1.0 (Sessão 2): menu escondido até saber quem está logado.
   Página única do Print. Carrega o visual (style.css) e o app (js/app.js como módulo).
 -->
 <html lang="pt-BR" class="sem-menu">
@@ -13,6 +16,13 @@
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#2447d6">
 <meta name="apple-mobile-web-app-title" content="Print">
+<meta name="application-name" content="Print">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="./manifest.json">
+<link rel="icon" type="image/png" sizes="192x192" href="./icones/icone-192.png">
+<link rel="apple-touch-icon" sizes="180x180" href="./icones/apple-touch-icon.png">
 <title>Print — Orçamentos e Gestão</title>
 <link rel="stylesheet" href="./style.css">
 <script>

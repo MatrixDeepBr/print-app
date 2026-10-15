@@ -1,8 +1,15 @@
 /*
   Arquivo: js/app.js
-  Versão: 2.3.0
-  Sessão: 4B — Cadastro e conta (Google, WhatsApp único, várias profissões)
+  Versão: 2.4.0
+  Sessão: 9 — Instalação como app (PWA) e abrir sem internet
   Data: 15/10/2026
+  2.4.0 (seção 9, nova; o resto é igual à 2.3.0, só mostrar() avisa a seção 9):
+         registra o ./sw.js; faixa "Nova versão do Print. Tocar para atualizar"
+         (a troca só acontece com o toque); faixa "Instalar o Print" (Android e
+         computador pelo beforeinstallprompt; iPhone abre a folha "Como instalar
+         no iPhone"); "Agora não" esconde por 7 dias (localStorage
+         print.instalarDepois); faixa fina "Sem internet…". CSS injetado
+         (<style data-print="pwa-css">, classes .pwa-).
   2.3.0 (só o caminho de Complete seu cadastro):
          rota #completar (telaCompletar de auth.js) e situação 'completar':
          logado sem users/{uid} (1º acesso com Google ou cadastro que não terminou),
@@ -313,6 +320,7 @@ async function mostrar() {
   if (minha !== geracao) return; // o usuário já foi para outra tela
 
   mostrarMenu(situacao() === 'ativo');
+  pwaTrocouTela(nome); // 2.4.0
   const conteudo = $('.js-conteudo');
   const el = document.createElement('section');
   el.className = 'tela';
@@ -452,10 +460,239 @@ export async function recarregarUsuario() {
 }
 
 /* ============================================================
+   9. App instalado (PWA) — Sessão 9 · 2.4.0
+   Faixas no alto (abaixo do topo): sem internet, nova versão, instalar.
+   ============================================================ */
+const PWA_ADIAR_DIAS = 7;
+const pwa = {
+  caixa: null,        // <div class="pwa-topo">
+  pedidoInstalar: null, // evento beforeinstallprompt guardado
+  regSw: null,        // registro do service worker
+  atualizando: false, // o pintor tocou em "atualizar"
+  tela: null          // tela atual (para não mostrar o convite nas boas-vindas)
+};
+
+function pwaInstalado() {
+  return window.matchMedia?.('(display-mode: standalone)').matches ||
+         window.matchMedia?.('(display-mode: fullscreen)').matches ||
+         window.navigator.standalone === true;
+}
+
+function pwaEhIphone() {
+  const ua = navigator.userAgent || '';
+  return /iPhone|iPad|iPod/.test(ua) ||
+         (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1); // iPad novo se diz Mac
+}
+
+function pwaAdiado() {
+  try {
+    const ate = Number(localStorage.getItem('print.instalarDepois') || 0);
+    return ate > Date.now();
+  } catch (e) { return false; }
+}
+
+function pwaAdiar() {
+  try { localStorage.setItem('print.instalarDepois', String(Date.now() + PWA_ADIAR_DIAS * 864e5)); }
+  catch (e) { /* sem armazenamento: some só nesta visita */ }
+}
+
+function pwaCss() {
+  if (document.querySelector('style[data-print="pwa-css"]')) return;
+  const st = document.createElement('style');
+  st.dataset.print = 'pwa-css';
+  st.textContent = `
+.pwa-topo { position: sticky; top: 0; z-index: 3; }
+.pwa-topo:empty { display: none; }
+@media (min-width: 900px) { .pwa-topo { margin-left: var(--side-w); } }
+.pwa-semnet { background: var(--star); color: #1b1b1b; font-size: 13px; font-weight: 600; line-height: 1.3; padding: 6px 16px; text-align: center; }
+.pwa-faixa { display: flex; align-items: center; gap: 8px; max-width: 760px; margin: 8px auto 0; padding: 6px 6px 6px 14px; background: var(--card); border: 1.5px solid var(--line); border-radius: var(--raio); box-shadow: 0 4px 14px rgba(0, 0, 0, .12); }
+.pwa-faixa + .pwa-faixa { margin-top: 6px; }
+.pwa-topo > :last-child.pwa-faixa { margin-bottom: 4px; }
+@media (max-width: 899px) { .pwa-faixa { margin-left: 10px; margin-right: 10px; } }
+.pwa-faixa-txt { flex: 1 1 auto; font-weight: 650; font-size: 15px; min-width: 0; }
+.pwa-btn { min-height: var(--toque); padding: 0 14px; border-radius: 12px; border: 1.5px solid var(--line); background: var(--card); font-weight: 650; font-size: 15px; flex: none; }
+.pwa-btn.pwa-sim { background: var(--brand); border-color: var(--brand); color: var(--onbrand); }
+.pwa-btn.pwa-nao { border-color: transparent; background: none; color: var(--muted); padding: 0 10px; }
+button.pwa-faixa.pwa-nova { width: calc(100% - 20px); min-height: var(--toque); text-align: left; background: var(--brand); border-color: var(--brand); color: var(--onbrand); font: inherit; font-weight: 700; padding: 10px 14px; }
+@media (min-width: 900px) { button.pwa-faixa.pwa-nova { width: auto; max-width: 760px; display: flex; } }
+.pwa-folha .sheet h2 { margin: 4px 0 6px; font-size: 20px; }
+.pwa-passos { list-style: none; margin: 12px 0 16px; padding: 0; counter-reset: pwa; }
+.pwa-passos li { counter-increment: pwa; display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 16px; }
+.pwa-passos li:last-child { border-bottom: 0; }
+.pwa-passos li::before { content: counter(pwa); flex: none; width: 30px; height: 30px; border-radius: 50%; background: var(--soft); color: var(--brand); font-weight: 800; display: inline-flex; align-items: center; justify-content: center; }
+.pwa-ic { display: inline-flex; vertical-align: middle; color: var(--brand); }
+.pwa-ic svg { width: 22px; height: 22px; }
+`;
+  document.head.appendChild(st);
+}
+
+function pwaCaixa() {
+  if (pwa.caixa) return pwa.caixa;
+  pwaCss();
+  const c = document.createElement('div');
+  c.className = 'pwa-topo';
+  const topo = $('.topo');
+  if (topo) topo.after(c); else $('.shell')?.prepend(c);
+  pwa.caixa = c;
+  return c;
+}
+
+/** Desenha as faixas que valem agora (chamada sempre que algo muda). */
+function pwaDesenhar() {
+  const c = pwaCaixa();
+  const partes = [];
+
+  if (navigator.onLine === false) {
+    partes.push('<div class="pwa-semnet" role="status">Sem internet. O que você salvar vai junto quando o sinal voltar.</div>');
+  }
+  if (pwa.regSw?.waiting && navigator.serviceWorker?.controller) {
+    partes.push('<button type="button" class="pwa-faixa pwa-nova js-pwa-atualizar">' +
+      (pwa.atualizando ? '⏳ Atualizando…' : '🔄 Nova versão do Print. Tocar para atualizar') + '</button>');
+  }
+  if (pwaMostrarConvite()) {
+    partes.push('<div class="pwa-faixa pwa-instalar" role="region" aria-label="Instalar o Print">' +
+      '<span class="pwa-faixa-txt">📲 Instalar o Print</span>' +
+      '<button type="button" class="pwa-btn pwa-nao js-pwa-depois">Agora não</button>' +
+      '<button type="button" class="pwa-btn pwa-sim js-pwa-instalar">Instalar</button></div>');
+  }
+
+  c.innerHTML = partes.join('');
+  pwaEncaixar();
+  c.querySelector('.js-pwa-atualizar')?.addEventListener('click', pwaAtualizar);
+  c.querySelector('.js-pwa-depois')?.addEventListener('click', () => { pwaAdiar(); pwaDesenhar(); });
+  c.querySelector('.js-pwa-instalar')?.addEventListener('click', pwaInstalar);
+}
+
+/** Gruda as faixas logo abaixo do topo (a altura do topo muda com o entalhe do celular). */
+function pwaEncaixar() {
+  const c = pwa.caixa;
+  if (!c) return;
+  const t = $('.topo');
+  const h = t && getComputedStyle(t).display !== 'none' ? t.getBoundingClientRect().height : 0;
+  c.style.top = Math.round(h) + 'px';
+}
+
+function pwaMostrarConvite() {
+  if (pwaInstalado() || pwaAdiado()) return false;
+  if (!pwa.tela || pwa.tela === 'boasvindas') return false;
+  if (pwa.pedidoInstalar) return true;                 // Android e computador
+  return pwaEhIphone();                                 // iPhone/iPad: folha de ajuda
+}
+
+async function pwaInstalar() {
+  const ev = pwa.pedidoInstalar;
+  if (!ev) { pwaFolhaIphone(); return; }
+  pwa.pedidoInstalar = null; // o pedido só pode ser usado uma vez
+  try {
+    ev.prompt();
+    const r = await ev.userChoice;
+    if (r?.outcome !== 'accepted') pwaAdiar(); // fechou sem instalar = "Agora não"
+  } catch (e) {
+    console.warn('[Print] instalar', e);
+  }
+  pwaDesenhar();
+}
+
+/** Folha "Como instalar no iPhone" (nunca alert). */
+function pwaFolhaIphone() {
+  pwaCss();
+  const icCompartilhar = '<span class="pwa-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M8 7l4-4 4 4"/><path d="M6 11H5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1h-1"/></svg></span>';
+  const icMais = '<span class="pwa-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M12 8v8M8 12h8"/></svg></span>';
+  const ov = document.createElement('div');
+  ov.className = 'ov pwa-folha';
+  ov.innerHTML =
+    '<div class="sheet" role="dialog" aria-modal="true" aria-labelledby="pwa-folha-tit">' +
+      '<h2 id="pwa-folha-tit">Como instalar no iPhone</h2>' +
+      '<p class="muted">Leva 10 segundos. Depois o Print abre pelo ícone, em tela cheia.</p>' +
+      '<ol class="pwa-passos">' +
+        '<li><span>Toque em <b>Compartilhar</b> ' + icCompartilhar + ' (o quadrado com a seta, na barra do Safari)</span></li>' +
+        '<li><span>Role e toque em <b>Adicionar à Tela de Início</b> ' + icMais + '</span></li>' +
+        '<li><span>Toque em <b>Adicionar</b>, no canto de cima</span></li>' +
+      '</ol>' +
+      '<button type="button" class="big primary js-pwa-ok">Entendi</button>' +
+      '<button type="button" class="big js-pwa-folha-depois" style="justify-content:center">Agora não</button>' +
+    '</div>';
+  const fechar = () => { ov.remove(); document.removeEventListener('keydown', tecla); };
+  const tecla = e => { if (e.key === 'Escape') fechar(); };
+  ov.addEventListener('click', e => { if (e.target === ov) fechar(); });
+  ov.querySelector('.js-pwa-ok').addEventListener('click', fechar);
+  ov.querySelector('.js-pwa-folha-depois').addEventListener('click', () => { pwaAdiar(); fechar(); pwaDesenhar(); });
+  document.addEventListener('keydown', tecla);
+  document.body.appendChild(ov);
+  ov.querySelector('.js-pwa-ok').focus();
+}
+
+/** O pintor tocou em "Nova versão": a versão que esperava assume e a página recarrega. */
+function pwaAtualizar() {
+  const espera = pwa.regSw?.waiting;
+  if (!espera) { location.reload(); return; }
+  pwa.atualizando = true;
+  pwaDesenhar();
+  espera.postMessage({ tipo: 'atualizar' });
+  setTimeout(() => location.reload(), 4000); // reserva, se o aviso de troca não chegar
+}
+
+/** Chamada pelo roteador a cada troca de tela. */
+function pwaTrocouTela(nome) {
+  pwa.tela = nome;
+  pwaDesenhar();
+}
+
+async function pwaRegistrar() {
+  if (!('serviceWorker' in navigator) || !window.isSecureContext) return;
+  // Só recarrega quando o pintor pediu (a 1ª instalação também troca o controle, sem recarregar).
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (pwa.atualizando) location.reload();
+  });
+  try {
+    const reg = await navigator.serviceWorker.register('./sw.js', { scope: './' });
+    pwa.regSw = reg;
+    const vigiar = sw => {
+      if (!sw) return;
+      sw.addEventListener('statechange', () => { if (sw.state === 'installed') pwaDesenhar(); });
+    };
+    vigiar(reg.installing);
+    reg.addEventListener('updatefound', () => vigiar(reg.installing));
+    pwaDesenhar();
+    // App instalado fica dias aberto em segundo plano: procura versão nova ao voltar (no máximo 1×/hora).
+    let ultimaBusca = Date.now();
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && navigator.onLine !== false && Date.now() - ultimaBusca > 36e5) {
+        ultimaBusca = Date.now();
+        reg.update().catch(() => {});
+      }
+    });
+  } catch (e) {
+    console.warn('[Print] service worker não registrado', e);
+  }
+}
+
+function iniciarPwa() {
+  pwaCaixa();
+  window.addEventListener('beforeinstallprompt', e => {
+    e.preventDefault();          // guarda para mostrar a nossa faixa
+    pwa.pedidoInstalar = e;
+    pwaDesenhar();
+  });
+  window.addEventListener('appinstalled', () => {
+    pwa.pedidoInstalar = null;
+    pwaDesenhar();
+  });
+  window.addEventListener('resize', pwaEncaixar);
+  window.addEventListener('online', pwaDesenhar);
+  window.addEventListener('offline', pwaDesenhar);
+  window.matchMedia?.('(display-mode: standalone)').addEventListener?.('change', pwaDesenhar);
+  pwaDesenhar();
+  if (document.readyState === 'complete') pwaRegistrar();
+  else window.addEventListener('load', pwaRegistrar, { once: true });
+}
+
+/* ============================================================
    8. Partida
    ============================================================ */
 function iniciar() {
   aplicarTema(lerTema());
+  iniciarPwa(); // 2.4.0
   document.querySelectorAll('.js-tema').forEach(b => b.addEventListener('click', trocarTema));
   window.matchMedia('(prefers-color-scheme: dark)')
     .addEventListener?.('change', () => aplicarTema(lerTema()));
