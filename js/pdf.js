@@ -1,8 +1,11 @@
 /*
   Arquivo: js/pdf.js
-  Versão: 1.0.0
-  Sessão: 7 — PDF (3 modelos)
+  Versão: 1.0.1
+  Sessão: 8 — Refinamento do relatório de uso (1.0.0 era da Sessão 7)
   Data: 15/10/2026
+  1.0.1: só o "Sim" de "Marcar como Enviado?": grava também contadoEnvio: true
+         no orçamento e chama registrarEnvio() do uso.js uma vez por orçamento
+         (se o orçamento já tinha contadoEnvio, não conta de novo). O PDF não mudou.
   Gera o PDF do orçamento em A4, desenhado direto com o jsPDF (sem captura de
   tela), e entrega: no celular abre o menu de compartilhar (WhatsApp, e-mail…);
   no computador baixa e abre numa aba nova. Depois pergunta "Marcar como Enviado?".
@@ -16,7 +19,8 @@
             do orçamento; valor da linha = cobr 'fechado' ? preco : qtd × preco;
             valor da fase = valorFechado (modo 'fechado') ou soma das linhas.
   Banco:    "Sim" na folha grava status 'enviado' e atualizadoEm em
-            users/{uid}/orcamentos/{id} (updateDoc, sem esperar o servidor).
+            users/{uid}/orcamentos/{id} (updateDoc, sem esperar o servidor),
+            mais contadoEnvio: true na primeira vez (1.0.1).
   Biblioteca: jsPDF 4.2.1 (versão fixa), pela CDN jsDelivr (reserva: unpkg),
             carregada só na primeira vez que gera PDF.
   CSS:      css/pdf.css (folhas), injetado por este módulo.
@@ -28,6 +32,7 @@
 import { auth, db, fs } from './firebase.js';
 import { moeda, num, paraData, dataBR, traduzErro } from './utils.js';
 import { toast } from './app.js';
+import { registrarEnvio } from './uso.js'; // 1.0.1
 
 /* ============================================================
    1. Biblioteca e CSS (carregados só uma vez)
@@ -660,13 +665,28 @@ function perguntarEnviado(o) {
   );
 }
 
-function marcarEnviado(o) {
+/* 1.0.1: conta o envio no relatório uma vez por orçamento (contadoEnvio). */
+async function jaFoiContado(ref, o) {
+  if (o.contadoEnvio === true) return true;
+  try {
+    // Lê do aparelho se estiver sem internet (o orçamento foi salvo aqui).
+    const s = await Promise.race([fs.getDoc(ref), new Promise((_, nao) => setTimeout(() => nao(new Error('tempo')), 3000))]);
+    return s.exists() && s.data().contadoEnvio === true;
+  } catch (e) { return false; }
+}
+
+async function marcarEnviado(o) {
   const uid = auth.currentUser?.uid;
   if (!uid || !o.id) { toast('Não deu para marcar. Entre de novo na conta.', 'erro'); return; }
   jaMarcados.add(o.id);
-  fs.updateDoc(fs.doc(db, 'users', uid, 'orcamentos', o.id), { status: 'enviado', atualizadoEm: fs.serverTimestamp() })
-    .catch(e => { jaMarcados.delete(o.id); console.error('[Print] marcar enviado', e); toast(traduzErro(e), 'erro'); });
   toast(navigator.onLine ? 'Status: Enviado' : 'Enviado ✓ (salvo no aparelho)', 'ok');
+  const ref = fs.doc(db, 'users', uid, 'orcamentos', o.id);
+  const contado = await jaFoiContado(ref, o);                       // 1.0.1
+  const campos = { status: 'enviado', atualizadoEm: fs.serverTimestamp() };
+  if (!contado) campos.contadoEnvio = true;                         // 1.0.1
+  fs.updateDoc(ref, campos)
+    .catch(e => { jaMarcados.delete(o.id); console.error('[Print] marcar enviado', e); toast(traduzErro(e), 'erro'); });
+  if (!contado) { o.contadoEnvio = true; registrarEnvio(); }        // 1.0.1
 }
 
 /** Quando o celular exige um toque novo para abrir o menu de compartilhar. */

@@ -1,8 +1,14 @@
 /*
   Arquivo: js/master.js
-  Versão: 1.2.0
-  Sessão: 4B — Cadastro e conta (1.1.0 era da 3B, 1.0.0 da Sessão 3)
+  Versão: 1.3.0
+  Sessão: 8 — Refinamento do relatório de uso (1.2.0 era da 4B, 1.1.0 da 3B, 1.0.0 da Sessão 3)
   Data: 15/10/2026
+  1.3.0: aba Uso refeita: resumo do mês (somado do uso/dias, o dia 1º começa
+         do zero), gráfico de 14 dias, fichas (Todos, Quem chamar hoje, Sem uso
+         há 7 dias, Sumidos há 30 dias, Maiores volumes, Liberados hoje sem uso)
+         com contagem, ficha do pintor com gráfico de minutos e orçamentos,
+         orçamentos enviados e última atividade (resumos.ultimoUsoEm).
+         Datas do relatório no fuso de Brasília (diaBrasilia do uso.js).
   1.2.0: profissões na lista e na ficha (⋯ Ações), filtro por profissão;
          selo "⚠️ Possível conta repetida" e filtro (contaRepetidaAparelho);
          na ficha, "Liberar este WhatsApp" (apaga telefones/{numero}, exige
@@ -14,7 +20,7 @@
               e "Liberados hoje", selo auto/manual, ações: bloquear, reativar,
               mudar plano, estender o Pro, notas
     Pedidos   pedidos de contato (novo, atendido, parceiro), WhatsApp, notas
-    Uso       relatório dos últimos 14 dias, ranking e "Quem chamar hoje"
+    Uso       mês corrente + últimos 14 dias, gráfico, fichas de filtro e ficha do pintor
     Empresa   dados da empresa (config/empresa), mostrados nos Termos
     Ajustes   chave Liberação automática (com os minutos), mensagemPendente,
               diasTesteProPadrao e "Ativar teste Pro para todos"
@@ -39,6 +45,7 @@
 import { db, fs } from './firebase.js';
 import { formatarWhats, PROFISSOES, lerEspecialidades, nomesProfissoes } from './auth.js'; // 1.2.0: + profissões
 import { segundosDaVez, lerMinutos } from './status.js'; // 1.1.0: mesmo sorteio do aparelho do pintor
+import { diaBrasilia } from './uso.js'; // 1.3.0: o mesmo dia que o aparelho do pintor grava
 
 /* ============================================================
    1. Critérios do relatório (mude aqui quando quiser)
@@ -50,7 +57,11 @@ export const CRITERIOS = {
   // Pontos do ranking de engajamento (no período do relatório):
   pontosPorDia: 10,        // cada dia em que abriu o app
   pontosPorMinuto: 1,      // cada minuto de uso ativo
-  pontosPorOrcamento: 5    // cada orçamento criado
+  pontosPorOrcamento: 5,   // cada orçamento concluído
+  pontosPorEnvio: 8,       // 1.3.0: cada orçamento marcado como enviado
+  // Fichas da aba Uso (1.3.0):
+  diasSemUso: 7,           // "Sem uso há N dias": usava e parou há N dias ou mais...
+  diasSumido: 30           // ...até "Sumidos há N dias" (daí em diante)
 };
 
 const ALFABETO_CODIGO = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // sem 0, O, 1, I e L
@@ -95,6 +106,7 @@ function novoEstado(el, ctx) {
     busca: '',
     filtroPedidos: 'novo',
     uso: null,            // resultado do relatório
+    filtroUso: 'todos',   // 1.3.0: ficha escolhida na aba Uso
     usoErro: null,
     usoCarregando: false,
     unsubs: [],
@@ -158,13 +170,11 @@ function dataHora(d) {
   return x.toLocaleDateString('pt-BR') + ' ' + x.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 }
 
-/** "há 3 dias", "hoje", "ontem". */
+/** "há 3 dias", "hoje", "ontem" (1.3.0: contado pelos dias de Brasília). */
 function haQuanto(d) {
   const x = U().paraData(d);
   if (!x) return '';
-  const a = new Date(); a.setHours(0, 0, 0, 0);
-  const b = new Date(x.getTime()); b.setHours(0, 0, 0, 0);
-  const n = Math.round((a - b) / DIA_MS);
+  const n = diasEntre(diaBrasilia(x), diaBrasilia());
   if (n <= 0) return 'hoje';
   if (n === 1) return 'ontem';
   return 'há ' + n + ' dias';
@@ -247,6 +257,7 @@ export async function montar(el, ctx) {
     '</nav>' +
     '<div class="js-aba"></div>';
 
+  garantirCssUso(); // 1.3.0
   el.addEventListener('click', aoClicar);
   el.addEventListener('input', aoDigitar);
   el.addEventListener('submit', aoEnviar);
@@ -554,14 +565,27 @@ function atualizarPedidos() {
     : '<div class="card mt-vazio">' + (f === 'novo' ? 'Nenhum pedido novo ✓' : 'Nenhum pedido aqui.') + '</div>';
 }
 
-/* ---------- 5.3 Relatório de uso ---------- */
-function diasDoPeriodo(n) {
+/* ---------- 5.3 Relatório de uso (1.3.0) ----------
+   Uma consulta só (collectionGroup 'dias'), desde o mais antigo entre
+   14 dias atrás e o dia 1º do mês. Datas sempre no fuso de Brasília.
+   Números do mês = soma dos uso/dias do mês (o dia 1º começa do zero). */
+const MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+const ISO_DIA = /^\d{4}-\d{2}-\d{2}$/;
+const CSS_USO = 'mt-uso-css';
+
+function msDoIso(iso) { const [y, m, d] = iso.split('-').map(Number); return Date.UTC(y, m - 1, d); }
+/** "2026-10-15" + n dias (sem depender do fuso do aparelho). */
+function isoMais(iso, n) { return new Date(msDoIso(iso) + n * DIA_MS).toISOString().slice(0, 10); }
+/** Quantos dias de a até b (datas "AAAA-MM-DD"). */
+function diasEntre(a, b) { return Math.round((msDoIso(b) - msDoIso(a)) / DIA_MS); }
+/** Qualquer data -> dia de Brasília ("" se inválida). */
+function diaDe(d) { const x = U().paraData(d); return x ? diaBrasilia(x) : ''; }
+/** 00:00 de Brasília (o Brasil não tem horário de verão desde 2019). */
+function inicioDoDia(iso) { return new Date(iso + 'T00:00:00-03:00'); }
+
+function diasDoPeriodo(n, hoje = diaBrasilia()) {
   const lista = [];
-  const d = new Date(); d.setHours(12, 0, 0, 0);
-  for (let i = 0; i < n; i++) {
-    lista.unshift(U().hojeISO(d));
-    d.setDate(d.getDate() - 1);
-  }
+  for (let i = n - 1; i >= 0; i--) lista.push(isoMais(hoje, -i));
   return lista;
 }
 
@@ -572,16 +596,19 @@ async function carregarUso() {
   atualizarUso();
   const meu = S;
   try {
-    const dias = diasDoPeriodo(CRITERIOS.diasRelatorio);
-    const inicio = U().paraData(dias[0]); // 00:00 do primeiro dia
-    const q = fs.query(fs.collectionGroup(db, 'dias'), fs.where('atualizadoEm', '>=', ts(inicio)));
+    const hoje = diaBrasilia();
+    const dias = diasDoPeriodo(CRITERIOS.diasRelatorio, hoje);
+    const mes = hoje.slice(0, 7);
+    const primeiro = mes + '-01';
+    const desde = primeiro < dias[0] ? primeiro : dias[0];
+    const q = fs.query(fs.collectionGroup(db, 'dias'), fs.where('atualizadoEm', '>=', ts(inicioDoDia(desde))));
     const [snapUso, snapRes] = await Promise.all([
       fs.getDocs(q),
       fs.getDocs(fs.collection(db, 'resumos')).catch(() => null)
     ]);
     if (S !== meu) return;
     const resumos = new Map((snapRes?.docs || []).map(d => [d.id, d.data()]));
-    S.uso = { dias, docs: snapUso.docs.map(d => ({ id: d.id, uid: d.ref.parent.parent?.id, ...d.data() })), resumos, quando: new Date() };
+    S.uso = { hoje, dias, mes, desde, docs: snapUso.docs.map(d => ({ id: d.id, uid: d.ref.parent.parent?.id, ...d.data() })), resumos, quando: new Date() };
   } catch (e) {
     console.error('[Print] relatório de uso', e);
     if (S === meu) S.usoErro = e;
@@ -589,53 +616,147 @@ async function carregarUso() {
   if (S === meu) {
     S.usoCarregando = false;
     atualizarUso();
+    atualizarFolhaAberta();
   }
 }
 
-/** Junta os dias por pintor e calcula o ranking. */
+const usouNoDia = x => !!x && (x.a > 0 || x.s > 0);
+
+/** Junta os dias por pintor. O dono fica fora de tudo (lista, gráfico e totais). */
 function calcularUso() {
-  const { dias, docs, resumos } = S.uso;
+  const { hoje, dias, mes, desde, docs, resumos } = S.uso;
+  const eu = S.ctx.estado.uid;
   const noPeriodo = new Set(dias);
-  const janela = new Set(dias.slice(-CRITERIOS.janelaChamar));
+  const janela = dias.slice(-CRITERIOS.janelaChamar);
+  const num = U().num;
   const por = new Map();
   const linha = uid => {
-    if (!por.has(uid)) por.set(uid, { uid, porDia: {}, aberturas: 0, segundos: 0, orcamentos: 0, valor: 0, ultima: null });
+    if (!por.has(uid)) {
+      por.set(uid, {
+        uid, porDia: {}, aberturas: 0, segundos: 0, orcamentos: 0, enviados: 0, valor: 0,
+        mesOrc: 0, mesEnv: 0, mesValor: 0, mesDias: 0, ultimaDoc: null
+      });
+    }
     return por.get(uid);
   };
 
   for (const d of docs) {
-    if (!d.uid || !noPeriodo.has(d.id)) continue;
+    if (!d.uid || d.uid === eu || !ISO_DIA.test(d.id) || d.id < desde || d.id > hoje) continue;
     const p = linha(d.uid);
-    const a = U().num(d.aberturas), s = U().num(d.segundosAtivos), o = U().num(d.orcamentosCriados), v = U().num(d.valorOrcado);
-    p.porDia[d.id] = { a, s, o, v };
-    p.aberturas += a; p.segundos += s; p.orcamentos += o; p.valor += v;
+    const x = { a: num(d.aberturas), s: num(d.segundosAtivos), o: num(d.orcamentosCriados), e: num(d.orcamentosEnviados), v: num(d.valorOrcado) };
+    p.porDia[d.id] = x;
+    if (noPeriodo.has(d.id)) {
+      p.aberturas += x.a; p.segundos += x.s; p.orcamentos += x.o; p.enviados += x.e; p.valor += x.v;
+    }
+    if (d.id.startsWith(mes)) {
+      p.mesOrc += x.o; p.mesEnv += x.e; p.mesValor += x.v;
+      if (usouNoDia(x)) p.mesDias += 1;
+    }
     const quando = U().paraData(d.atualizadoEm);
-    if (quando && (!p.ultima || quando > p.ultima)) p.ultima = quando;
+    if (quando && (!p.ultimaDoc || quando > p.ultimaDoc)) p.ultimaDoc = quando;
   }
   // Ativos sem uso também entram (com zero), para aparecer quem sumiu.
-  for (const [uid, u] of S.users) if (u.status === 'ativo') linha(uid);
-  por.delete(S.ctx.estado.uid); // o próprio dono não entra no relatório
+  for (const [uid, u] of S.users) if (u.status === 'ativo' && uid !== eu) linha(uid);
 
-  const linhas = [...por.values()].map(p => {
-    const usou = k => { const x = p.porDia[k]; return x && (x.a > 0 || x.s > 0); };
-    p.diasUsados = dias.filter(usou).length;
-    p.diasJanela = [...janela].filter(usou).length;
-    p.minutos = Math.round(p.segundos / 60);
-    p.pontos = p.diasUsados * CRITERIOS.pontosPorDia + p.minutos * CRITERIOS.pontosPorMinuto + p.orcamentos * CRITERIOS.pontosPorOrcamento;
-    p.u = S.users.get(p.uid) || {};
-    p.resumo = resumos.get(p.uid) || null;
+  return [...por.values()].map(p => {
+    const r = resumos.get(p.uid) || null;
+    const u = S.users.get(p.uid) || {};
+    p.u = u;
+    p.resumo = r;
     p.parceiro = ehParceiro(p.uid);
+    p.diasUsados = dias.filter(k => usouNoDia(p.porDia[k])).length;
+    p.diasJanela = janela.filter(k => usouNoDia(p.porDia[k])).length;
+    p.minutos = Math.round(p.segundos / 60);
+    p.pontos = p.diasUsados * CRITERIOS.pontosPorDia + p.minutos * CRITERIOS.pontosPorMinuto +
+      p.orcamentos * CRITERIOS.pontosPorOrcamento + p.enviados * CRITERIOS.pontosPorEnvio;
+    // Última atividade: o mais recente entre ultimoUsoEm, o uso/dias lido e os resumos.
+    const sinais = [r?.ultimoUsoEm, p.ultimaDoc, r?.ultimoOrcamentoEm, r?.ultimoEnvioEm].map(x => U().paraData(x)).filter(Boolean);
+    p.jaUsou = sinais.length > 0;
+    p.ultima = sinais.length ? new Date(Math.max(...sinais.map(x => x.getTime()))) : null;
+    const ref = p.ultima || U().paraData(u.liberadoEm) || U().paraData(u.criadoEm);
+    p.diasSem = ref ? Math.max(0, diasEntre(diaBrasilia(ref), hoje)) : null;
+    p.liberadoHoje = diaDe(u.liberadoEm) === hoje;
+    p.usouHoje = usouNoDia(p.porDia[hoje]) || diaDe(r?.ultimoUsoEm) === hoje;
+    p.criadosMes = r && r.mesRef === mes ? num(r.orcamentosMes) : 0; // conta rascunhos: só "criados"
     return p;
   });
-  linhas.sort((a, b) => b.pontos - a.pontos || (b.ultima?.getTime() || 0) - (a.ultima?.getTime() || 0));
-  return linhas;
+}
+
+const ehAtivo = l => (l.u.status || 'pendente') === 'ativo';
+
+/** Fichas da aba Uso: [chave, ícone, nome, quem entra, ordem]. */
+function filtrosUso() {
+  const C = CRITERIOS;
+  const porPontos = (a, b) => b.pontos - a.pontos || (b.ultima?.getTime() || 0) - (a.ultima?.getTime() || 0);
+  const porSumico = (a, b) => (a.diasSem ?? 9999) - (b.diasSem ?? 9999) || porPontos(a, b);
+  return [
+    ['todos', '', 'Todos', () => true, porPontos],
+    ['chamar', '📞', 'Quem chamar hoje', l => l.diasJanela >= C.minDiasChamar && !l.parceiro,
+      (a, b) => b.diasJanela - a.diasJanela || porPontos(a, b)],
+    ['semuso', '⏸️', 'Sem uso há ' + C.diasSemUso + ' dias',
+      l => ehAtivo(l) && l.jaUsou && l.diasSem != null && l.diasSem >= C.diasSemUso && l.diasSem < C.diasSumido, porSumico],
+    ['sumidos', '😴', 'Sumidos há ' + C.diasSumido + ' dias',
+      l => ehAtivo(l) && l.diasSem != null && l.diasSem >= C.diasSumido, porSumico],
+    ['volumes', '🏆', 'Maiores volumes', l => l.valor > 0 || l.orcamentos > 0,
+      (a, b) => b.valor - a.valor || b.orcamentos - a.orcamentos || porPontos(a, b)],
+    ['liberados', '🆕', 'Liberados hoje sem uso', l => l.liberadoHoje && !l.usouHoje,
+      (a, b) => (U().paraData(b.u.liberadoEm)?.getTime() || 0) - (U().paraData(a.u.liberadoEm)?.getTime() || 0)]
+  ];
+}
+
+const DICAS_USO = {
+  todos: () => 'Ordem de pontos (' + CRITERIOS.diasRelatorio + ' dias): ' + CRITERIOS.pontosPorDia + ' por dia de uso, ' + CRITERIOS.pontosPorMinuto +
+    ' por minuto, ' + CRITERIOS.pontosPorOrcamento + ' por orçamento concluído e ' + CRITERIOS.pontosPorEnvio + ' por orçamento enviado.',
+  chamar: () => 'Usou o app em ' + CRITERIOS.minDiasChamar + ' ou mais dos últimos ' + CRITERIOS.janelaChamar + ' dias e ainda não é parceiro.',
+  semuso: () => 'Usava o app e está parado há ' + CRITERIOS.diasSemUso + ' a ' + (CRITERIOS.diasSumido - 1) + ' dias. Bom momento para um "tudo certo com o app?".',
+  sumidos: () => 'Sem nenhuma atividade há ' + CRITERIOS.diasSumido + ' dias ou mais (ou liberado há tanto tempo e nunca usou).',
+  volumes: () => 'Quem mais orçou nos últimos ' + CRITERIOS.diasRelatorio + ' dias (valor, depois quantidade).',
+  liberados: () => 'Entrou hoje e ainda não abriu o app. Um "olá" ajuda a pessoa a começar.'
+};
+
+/** Gráfico de 14 barras, sem biblioteca. itens: [{ dia, valor, marca, titulo }]. */
+function grafico(itens, rotulo) {
+  const max = Math.max(1, ...itens.map(i => i.valor));
+  const hoje = S.uso.hoje;
+  return '<div class="mt-graf" role="img" aria-label="' + esc(rotulo) + '">' + itens.map(i => {
+    const h = i.valor > 0 ? Math.max(6, Math.round(i.valor / max * 100)) : 0;
+    const topo = i.marca
+      ? '<span class="mt-graf-m">' + esc(String(i.marca)) + '</span>'
+      : '<span class="mt-graf-v">' + (i.mostrarValor && i.valor > 0 ? esc(String(i.valor)) : '') + '</span>';
+    return '<div class="mt-graf-col' + (i.dia === hoje ? ' hoje' : '') + '" title="' + esc(i.titulo) + '">' +
+      '<div class="mt-graf-area">' + topo + '<span class="mt-graf-b' + (h ? '' : ' zero') + '" style="--h:' + h + '%"></span></div>' +
+      '<span class="mt-graf-d">' + esc(String(+i.dia.slice(8))) + '</span></div>';
+  }).join('') + '</div>';
+}
+
+function nomeMes(mes) { return MESES[+mes.slice(5) - 1] || mes; }
+
+function cartaoMes(linhas) {
+  const { dias, mes, hoje } = S.uso;
+  const soma = k => linhas.reduce((t, l) => t + l[k], 0);
+  const usaramMes = linhas.filter(l => l.mesDias > 0).length;
+  const porDia = dias.map(k => {
+    const n = linhas.filter(l => usouNoDia(l.porDia[k])).length;
+    return { dia: k, valor: n, mostrarValor: true, titulo: U().dataBR(k) + ': ' + n + (n === 1 ? ' pintor usou' : ' pintores usaram') };
+  });
+  return '<section class="card mt-mes">' +
+    '<b>Mês de ' + esc(nomeMes(mes)) + '</b> <span class="muted pequeno">(dia 1º a ' + esc(U().dataBR(hoje)) + ')</span>' +
+    '<div class="mt-nums">' +
+      '<div><b>' + soma('mesOrc') + '</b><span>concluídos</span></div>' +
+      '<div><b>' + soma('mesEnv') + '</b><span>enviados</span></div>' +
+      '<div><b>' + usaramMes + '</b><span>usaram no mês</span></div>' +
+      '<div><b>' + esc(U().moeda(soma('mesValor'))) + '</b><span>valor orçado no mês</span></div>' +
+    '</div>' +
+    '<p class="rotulo">Pintores que usaram o app por dia (' + CRITERIOS.diasRelatorio + ' dias)</p>' +
+    grafico(porDia, 'Pintores que usaram o app em cada um dos últimos ' + CRITERIOS.diasRelatorio + ' dias') +
+    '</section>';
 }
 
 function atualizarUso() {
   const lista = S?.el.querySelector('.js-lista');
   if (!lista || S.aba !== 'uso') return;
   const barra = '<div class="mt-barra-uso"><p class="muted pequeno">' +
-    (S.uso ? 'Últimos ' + CRITERIOS.diasRelatorio + ' dias: ' + esc(U().dataBR(S.uso.dias[0])) + ' a ' + esc(U().dataBR(S.uso.dias[S.uso.dias.length - 1])) +
+    (S.uso ? 'Últimos ' + CRITERIOS.diasRelatorio + ' dias: ' + esc(U().dataBR(S.uso.dias[0])) + ' a ' + esc(U().dataBR(S.uso.hoje)) +
       ' · lido às ' + esc(S.uso.quando.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })) : 'Relatório de uso') + '</p>' +
     '<button type="button" class="mt-btn" data-acao="atualizar-uso"' + (S.usoCarregando ? ' disabled' : '') + '>' + (S.usoCarregando ? 'Lendo…' : '🔄 Atualizar') + '</button></div>';
 
@@ -648,69 +769,170 @@ function atualizarUso() {
   if (!S.uso || !S.prontos.users) { lista.innerHTML = barra + '<p class="muted">Carregando…</p>'; return; }
 
   const linhas = calcularUso();
-  const comUso = linhas.filter(l => l.diasUsados > 0);
-  const semUso = linhas.filter(l => l.diasUsados === 0);
-  const chamar = comUso.filter(l => l.diasJanela >= CRITERIOS.minDiasChamar && !l.parceiro)
-    .sort((a, b) => b.diasJanela - a.diasJanela || b.pontos - a.pontos);
+  const filtros = filtrosUso();
+  const contagem = new Map(filtros.map(([k, , , quem]) => [k, linhas.filter(quem).length]));
+  if (!filtros.some(f => f[0] === S.filtroUso)) S.filtroUso = 'todos';
+  const [chave, , , quem, ordem] = filtros.find(f => f[0] === S.filtroUso);
+  const escolhidos = linhas.filter(quem).sort(ordem);
 
-  lista.innerHTML = barra +
-    '<h2>📞 Quem chamar hoje' + (chamar.length ? ' (' + chamar.length + ')' : '') + '</h2>' +
-    '<p class="muted pequeno">Usou o app em ' + CRITERIOS.minDiasChamar + ' ou mais dos últimos ' + CRITERIOS.janelaChamar + ' dias e ainda não é parceiro.</p>' +
-    (chamar.length ? chamar.map(cartaoChamar).join('') : '<div class="card mt-vazio">Ninguém na lista hoje.</div>') +
-    '<h2>🏆 Ranking de engajamento</h2>' +
-    '<p class="muted pequeno">Pontos: ' + CRITERIOS.pontosPorDia + ' por dia de uso, ' + CRITERIOS.pontosPorMinuto + ' por minuto e ' + CRITERIOS.pontosPorOrcamento + ' por orçamento.</p>' +
-    (comUso.length ? comUso.map((l, i) => cartaoRanking(l, i + 1)).join('') : '<div class="card mt-vazio">Ainda não há uso registrado no período.</div>') +
-    (semUso.length
-      ? '<h2>😴 Sem uso no período (' + semUso.length + ')</h2><div class="card">' +
-        semUso.map(l => '<div class="mt-linha"><span>' + esc(l.u.nome || 'Sem nome') + seloParceiro(l.uid) + '</span>' +
-          botaoZap(l.u.whatsapp, l.u.nome, 'mt-btn zap pequeno-btn') + '</div>').join('') + '</div>'
-      : '');
+  const fichas = '<div class="qk mt-filtros mt-fuso" role="group" aria-label="Filtrar o relatório de uso">' +
+    filtros.map(([k, ic, n]) => '<button type="button" data-fuso="' + k + '" class="' + (chave === k ? 'on' : '') + '" aria-pressed="' + (chave === k) + '">' +
+      '<span>' + (ic ? ic + ' ' : '') + esc(n) + '</span><span class="mt-cont">' + contagem.get(k) + '</span></button>').join('') +
+    '</div>';
+
+  let corpo;
+  if (chave === 'todos') {
+    const comUso = escolhidos.filter(l => l.diasUsados > 0);
+    const semUso = escolhidos.filter(l => l.diasUsados === 0);
+    corpo = (comUso.length ? comUso.map((l, i) => cartaoUso(l, chave, i + 1)).join('') : '<div class="card mt-vazio">Ainda não há uso registrado no período.</div>') +
+      (semUso.length
+        ? '<h2>Sem uso nos últimos ' + CRITERIOS.diasRelatorio + ' dias (' + semUso.length + ')</h2><div class="card">' +
+          semUso.map(l => '<div class="mt-linha"><button type="button" class="mt-nome-btn" data-acao="ficha-uso" data-uid="' + esc(l.uid) + '">' +
+            esc(l.u.nome || 'Sem nome') + '</button>' + seloParceiro(l.uid) +
+            botaoZap(l.u.whatsapp, l.u.nome, 'mt-btn zap pequeno-btn') + '</div>').join('') + '</div>'
+        : '');
+  } else {
+    corpo = escolhidos.length
+      ? escolhidos.map((l, i) => cartaoUso(l, chave, chave === 'volumes' ? i + 1 : 0)).join('')
+      : '<div class="card mt-vazio">Ninguém aqui hoje ✓</div>';
+  }
+
+  lista.innerHTML = barra + cartaoMes(linhas) + fichas +
+    '<p class="muted pequeno">' + esc(DICAS_USO[chave]()) + '</p>' +
+    '<p class="muted pequeno">' + escolhidos.length + (escolhidos.length === 1 ? ' pessoa' : ' pessoas') + '</p>' + corpo;
+}
+
+function textoUltima(l) {
+  if (l.ultima) return haQuanto(l.ultima) + ' (' + dataHora(l.ultima) + ')';
+  return 'nunca usou';
+}
+
+function seloDoFiltro(l, chave) {
+  if (chave === 'chamar') return '<span class="selo pl-pro">' + l.diasJanela + ' de ' + CRITERIOS.janelaChamar + ' dias</span>';
+  if (chave === 'volumes') return '<span class="selo pl-pro">' + esc(U().moeda(l.valor)) + '</span>';
+  if (chave === 'semuso' || chave === 'sumidos') return '<span class="selo st-pendente">' + (l.jaUsou ? 'parado há ' + l.diasSem + ' dias' : 'nunca usou') + '</span>';
+  if (chave === 'liberados') return seloLiberacao(l.u) || '<span class="selo pl-free">liberado hoje</span>';
+  return '<span class="selo">' + l.pontos + ' pts</span>';
+}
+
+function cartaoUso(l, chave, pos) {
+  const n = S.notas.get(l.uid);
+  const resumo14 = l.minutos + ' min · ' + l.orcamentos + (l.orcamentos === 1 ? ' concluído' : ' concluídos') + ' · ' +
+    l.enviados + (l.enviados === 1 ? ' enviado' : ' enviados') + ' · ' + U().moeda(l.valor);
+  return '<article class="card mu">' +
+    '<div class="mu-cab"><b>' + (pos ? '<span class="mt-pos">' + pos + 'º</span> ' : '') + esc(l.u.nome || 'Sem nome') + '</b>' + seloDoFiltro(l, chave) + '</div>' +
+    '<div class="mu-selos">' + (l.u.status && l.u.status !== 'ativo' ? seloStatus(l.u.status) : '') + seloParceiro(l.uid) +
+      (chave === 'liberados' ? '' : seloLiberacaoHoje(l)) +
+      '<span class="selo pl-free">' + l.diasUsados + ' de ' + CRITERIOS.diasRelatorio + ' dias</span></div>' +
+    '<p class="mu-info">' + linhaProfissoes(l.u) + (l.u.cidade ? ' · ' + esc(l.u.cidade) : '') + '<br>' +
+      esc(resumo14) + ' <span class="muted">(' + CRITERIOS.diasRelatorio + ' dias)</span><br>' +
+      'Última atividade: ' + esc(textoUltima(l)) +
+      (chave === 'chamar' ? '<br>Último contato: ' + esc(n?.ultimoContato ? haQuanto(n.ultimoContato) : 'nunca') : '') + '</p>' +
+    (chave === 'liberados' || chave === 'sumidos' ? '' : tira14(l)) +
+    '<div class="mu-acoes">' + botaoZap(l.u.whatsapp, l.u.nome) +
+      '<button type="button" class="mt-btn" data-acao="ficha-uso" data-uid="' + esc(l.uid) + '">📈 Ficha</button>' +
+      '<button type="button" class="mt-btn" data-acao="notas" data-uid="' + esc(l.uid) + '">📝 Notas</button></div>' +
+    '</article>';
+}
+
+/* Selo auto/manual só para quem foi liberado hoje (fora do filtro próprio). */
+function seloLiberacaoHoje(l) {
+  return l.liberadoHoje ? (seloLiberacao(l.u) || '<span class="selo pl-free">liberado hoje</span>') : '';
 }
 
 function tira14(l) {
   return '<div class="mt-tira" aria-label="Uso por dia">' + S.uso.dias.map(k => {
     const x = l.porDia[k];
     const min = x ? Math.round(x.s / 60) : 0;
-    const usou = x && (x.a > 0 || x.s > 0);
-    const nivel = !usou ? 0 : min < 5 ? 1 : min < 20 ? 2 : 3;
+    const nivel = !usouNoDia(x) ? 0 : min < 5 ? 1 : min < 20 ? 2 : 3;
     return '<i class="n' + nivel + '" title="' + esc(U().dataBR(k) + ': ' + (x ? x.a : 0) + ' aberturas, ' + min + ' min') + '"></i>';
   }).join('') + '</div>';
 }
 
-function numeros(l) {
-  const r = l.resumo;
-  return '<div class="mt-nums">' +
-    '<div><b>' + l.aberturas + '</b><span>aberturas</span></div>' +
-    '<div><b>' + l.minutos + '</b><span>minutos</span></div>' +
-    '<div><b>' + l.orcamentos + '</b><span>orçamentos</span></div>' +
-    '<div><b>' + esc(U().moeda(l.valor)) + '</b><span>valor orçado</span></div>' +
-    '</div>' +
-    '<p class="muted pequeno">Última atividade: ' + esc(l.ultima ? haQuanto(l.ultima) + ' (' + dataHora(l.ultima) + ')' : '—') +
-      (r && r.totalOrcamentos != null ? ' · Total de orçamentos: ' + esc(String(r.totalOrcamentos)) : '') + '</p>';
+/** Ficha do pintor: gráfico de minutos por dia com os orçamentos marcados. */
+function abrirFichaUso(uid) {
+  const desenhar = () => {
+    if (!S.uso) return '<p>Relatório ainda não carregado.</p><button type="button" class="big" data-fechar>Fechar</button>';
+    const l = calcularUso().find(x => x.uid === uid);
+    if (!l) return '<p>Esta pessoa não está no relatório.</p><button type="button" class="big" data-fechar>Fechar</button>';
+    const u = l.u, r = l.resumo || {};
+    const itens = S.uso.dias.map(k => {
+      const x = l.porDia[k] || { a: 0, s: 0, o: 0, e: 0, v: 0 };
+      const min = Math.round(x.s / 60);
+      return {
+        dia: k, valor: min, marca: x.o || 0,
+        titulo: U().dataBR(k) + ': ' + min + ' min, ' + x.a + ' aberturas, ' + x.o + ' concluídos, ' + x.e + ' enviados'
+      };
+    });
+    const linhaTotais = [
+      r.totalOrcamentos != null ? 'Orçamentos criados (total): ' + r.totalOrcamentos : '',
+      r.totalEnviados != null ? 'Enviados (total): ' + r.totalEnviados : '',
+      r.ultimoEnvioEm ? 'Último envio: ' + haQuanto(r.ultimoEnvioEm) : '',
+      r.totalClientes != null ? 'Clientes: ' + r.totalClientes : ''
+    ].filter(Boolean).join(' · ');
+    return '<h2 class="folha-tit">' + esc(u.nome || 'Sem nome') + '</h2>' +
+      '<div class="mu-selos">' + seloStatus(u.status || 'pendente') + seloPlano(u) + seloLiberacao(u) + seloParceiro(uid) + '</div>' +
+      '<p class="mu-info">' + linhaProfissoes(u) + (u.cidade ? ' · ' + esc(u.cidade) : '') + '<br>' +
+        (u.whatsapp ? '📱 ' + esc(formatarWhats(u.whatsapp)) : '📱 sem WhatsApp') +
+        (u.liberadoEm ? '<br>Liberado: ' + esc(dataHora(u.liberadoEm)) : '') +
+        '<br>Última atividade: <b>' + esc(textoUltima(l)) + '</b></p>' +
+      '<p class="rotulo">Minutos por dia (' + CRITERIOS.diasRelatorio + ' dias)</p>' +
+      grafico(itens, 'Minutos de uso por dia de ' + (u.nome || 'pintor')) +
+      '<p class="muted pequeno"><span class="mt-graf-m mt-leg">2</span> = orçamentos concluídos no dia · barra = minutos de uso</p>' +
+      '<p class="rotulo">Últimos ' + CRITERIOS.diasRelatorio + ' dias</p>' +
+      '<div class="mt-nums">' +
+        '<div><b>' + l.diasUsados + '</b><span>dias de uso</span></div>' +
+        '<div><b>' + l.minutos + '</b><span>minutos</span></div>' +
+        '<div><b>' + l.aberturas + '</b><span>aberturas</span></div>' +
+        '<div><b>' + l.orcamentos + '</b><span>concluídos</span></div>' +
+        '<div><b>' + l.enviados + '</b><span>enviados</span></div>' +
+        '<div><b>' + l.pontos + '</b><span>pontos</span></div>' +
+        '<div><b>' + esc(U().moeda(l.valor)) + '</b><span>valor orçado</span></div>' +
+      '</div>' +
+      '<p class="rotulo">Mês de ' + esc(nomeMes(S.uso.mes)) + '</p>' +
+      '<div class="mt-nums">' +
+        '<div><b>' + l.mesOrc + '</b><span>concluídos</span></div>' +
+        '<div><b>' + l.mesEnv + '</b><span>enviados</span></div>' +
+        '<div><b>' + l.criadosMes + '</b><span>criados (com rascunhos)</span></div>' +
+        '<div><b>' + esc(U().moeda(l.mesValor)) + '</b><span>valor orçado no mês</span></div>' +
+      '</div>' +
+      (linhaTotais ? '<p class="muted pequeno">' + esc(linhaTotais) + '</p>' : '') +
+      '<div class="mu-acoes">' + botaoZap(u.whatsapp, u.nome) +
+        '<button type="button" class="mt-btn" data-f="notas">📝 Notas e parceria</button></div>' +
+      '<button type="button" class="big" data-fechar style="margin-top:14px">Fechar</button>';
+  };
+  abrirFolha(desenhar(), ev => {
+    const b = ev.target.closest('[data-f]');
+    if (b?.dataset.f === 'notas') abrirNotas(uid);
+  }, { tipo: 'ficha-uso', uid, desenhar });
 }
 
-function cartaoChamar(l) {
-  const n = S.notas.get(l.uid);
-  return '<article class="card mu mt-chamar">' +
-    '<div class="mu-cab"><b>' + esc(l.u.nome || 'Sem nome') + '</b><span class="selo pl-pro">' + l.diasJanela + ' de ' + CRITERIOS.janelaChamar + ' dias</span></div>' +
-    '<p class="mu-info">' + l.minutos + ' min · ' + l.orcamentos + ' orçamentos em ' + CRITERIOS.diasRelatorio + ' dias' +
-      ' · Último contato: ' + esc(n?.ultimoContato ? haQuanto(n.ultimoContato) : 'nunca') + '</p>' +
-    '<div class="mu-acoes">' + botaoZap(l.u.whatsapp, l.u.nome) +
-      '<button type="button" class="mt-btn" data-acao="notas" data-uid="' + esc(l.uid) + '">📝 Notas e parceria</button></div>' +
-    '</article>';
-}
-
-function cartaoRanking(l, pos) {
-  return '<article class="card mu">' +
-    '<div class="mu-cab"><b><span class="mt-pos">' + pos + 'º</span> ' + esc(l.u.nome || 'Sem nome') + '</b>' +
-      '<span class="selo">' + l.pontos + ' pts</span></div>' +
-    '<div class="mu-selos">' + (l.u.status && l.u.status !== 'ativo' ? seloStatus(l.u.status) : '') + seloParceiro(l.uid) +
-      '<span class="selo pl-free">' + l.diasUsados + ' de ' + CRITERIOS.diasRelatorio + ' dias</span></div>' +
-    tira14(l) +
-    numeros(l) +
-    '<div class="mu-acoes">' + botaoZap(l.u.whatsapp, l.u.nome) +
-      '<button type="button" class="mt-btn" data-acao="notas" data-uid="' + esc(l.uid) + '">📝 Notas</button></div>' +
-    '</article>';
+/** Estilos do relatório (1.3.0). Ficam aqui porque o style.css não muda nesta sessão. */
+function garantirCssUso() {
+  if (document.querySelector('style[data-print="' + CSS_USO + '"]')) return;
+  const st = document.createElement('style');
+  st.dataset.print = CSS_USO;
+  st.textContent = [
+    '.mt-mes { margin: 10px 0 6px; }',
+    '.mt-mes .mt-nums { margin-top: 10px; }',
+    '.mt-graf { display: grid; grid-template-columns: repeat(14, minmax(0, 1fr)); gap: 3px; height: 112px; margin: 6px 0 4px; }',
+    '.mt-graf-col { display: flex; flex-direction: column; align-items: stretch; min-width: 0; }',
+    '.mt-graf-area { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; min-height: 0; }',
+    '.mt-graf-b { width: 100%; max-width: 22px; height: calc(var(--h) * 0.78); background: var(--brand); border-radius: 4px 4px 0 0; }',
+    '.mt-graf-b.zero { height: 2px; background: var(--line); border-radius: 1px; }',
+    '.mt-graf-v { font-size: 10.5px; line-height: 14px; min-height: 14px; color: var(--muted); }',
+    '.mt-graf-m { display: inline-flex; align-items: center; justify-content: center; min-width: 16px; height: 16px; padding: 0 3px; margin-bottom: 2px;' +
+      ' border-radius: 8px; background: var(--star); color: #172033; font-size: 10.5px; font-weight: 700; line-height: 1; }',
+    '.mt-graf-m.mt-leg { margin: 0 2px 0 0; vertical-align: middle; }',
+    '.mt-graf-d { font-size: 10.5px; line-height: 16px; text-align: center; color: var(--muted); border-top: 1px solid var(--line); }',
+    '.mt-graf-col.hoje .mt-graf-d { color: var(--ink); font-weight: 700; }',
+    '.mt-fuso { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }',
+    '.mt-fuso button { min-height: var(--toque); padding: 4px 8px; font-size: 13px; line-height: 1.2; border-radius: 12px; text-align: left; display: flex; align-items: center; justify-content: space-between; gap: 4px; }',
+    '@media (min-width: 900px) { .mt-fuso { grid-template-columns: repeat(3, 1fr); } }',
+    '.mt-cont { flex: none; display: inline-block; min-width: 22px; text-align: center; padding: 1px 6px; border-radius: 11px; background: var(--card); color: var(--ink); font-size: 12px; }',
+    '.mt-nome-btn { background: none; border: 0; padding: 0; min-height: var(--toque); color: var(--ink); font: inherit; font-weight: 600; text-align: left; flex: 1; cursor: pointer; }'
+  ].join('\n');
+  document.head.appendChild(st);
 }
 
 /* ---------- 5.4 Dados da empresa ---------- */
@@ -1265,6 +1487,8 @@ function aoClicar(ev) {
   if (fprof) { S.filtroProf = fprof.dataset.fprof; desenharAba(); return; }
   const fped = ev.target.closest('[data-fped]');
   if (fped) { S.filtroPedidos = fped.dataset.fped; desenharAba(); return; }
+  const fuso = ev.target.closest('[data-fuso]');                                // 1.3.0
+  if (fuso) { S.filtroUso = fuso.dataset.fuso; atualizarUso(); S.el.querySelector('.mt-fuso')?.scrollIntoView({ block: 'nearest' }); return; }
 
   const b = ev.target.closest('[data-acao]');
   if (!b || b.disabled) return;
@@ -1283,6 +1507,7 @@ function aoClicar(ev) {
       break;
     }
     case 'atualizar-uso': carregarUso(); break;
+    case 'ficha-uso': abrirFichaUso(uid); break; // 1.3.0
     case 'ativar-teste': confirmarTesteParaTodos(); break;
     case 'auto-chave': mudarChaveAuto(b.dataset.v === '1', b); break; // 1.1.0
   }
