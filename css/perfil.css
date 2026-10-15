@@ -1,0 +1,187 @@
+/*
+  Arquivo: css/perfil.css
+  Versão: 1.0.0
+  Sessão: 4 — Perfil e configurações
+  Data: 15/10/2026
+  Estilos só da tela Perfil (classes .pf-). Carregado pelo app.js 2.2.0.
+  Usa os tokens do style.css. Sem CSS por ID e sem !important.
+*/
+
+/* Espaço para o botão Salvar fixo não cobrir o fim da tela */
+.pf-tela { padding-bottom: 110px; }
+
+/* ---------- Cabeçalho ---------- */
+.pf-cab { display: flex; align-items: center; gap: 14px; margin: 6px 0 16px; }
+.pf-cab-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 72px;
+  height: 72px;
+  flex: none;
+  border-radius: 18px;
+  background: var(--brand);
+  color: var(--onbrand);
+  font-size: 32px;
+  font-weight: 800;
+  overflow: hidden;
+}
+.pf-cab-logo.com { background: #fff; border: 1.5px solid var(--line); }
+.pf-cab-logo img { width: 100%; height: 100%; object-fit: contain; }
+.pf-cab-txt { min-width: 0; }
+.pf-cab-txt b { display: block; font-size: 20px; line-height: 1.2; overflow-wrap: anywhere; }
+.pf-cab-txt span { display: block; font-size: 14px; overflow-wrap: anywhere; }
+.pf-cab-mod { margin-top: 4px; font-weight: 650; color: var(--brand); }
+
+/* ---------- Seções recolhíveis ---------- */
+.pf-secao { padding: 0; }
+.pf-sum {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 58px;
+  padding: 0 16px;
+  font-weight: 700;
+  font-size: 17px;
+  cursor: pointer;
+  list-style: none;
+}
+.pf-sum::-webkit-details-marker { display: none; }
+.pf-sum::after { content: "▾"; margin-left: auto; color: var(--muted); transition: transform .15s; }
+.pf-secao[open] > .pf-sum::after { transform: rotate(180deg); }
+.pf-secao[open] > .pf-sum { border-bottom: 1px solid var(--line); }
+.pf-corpo { padding: 2px 16px 16px; }
+.pf-corpo > .rotulo:first-child { margin-top: 12px; }
+
+/* ---------- Modalidade ---------- */
+.pf-modal { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 8px 0 4px; }
+.pf-op {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 64px;
+  padding: 6px 4px;
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  background: var(--card);
+  font-size: 14px;
+  font-weight: 650;
+}
+.pf-op span { font-size: 22px; line-height: 1; }
+.pf-op.on { border-color: var(--brand); background: var(--soft); color: var(--brand); }
+
+/* ---------- Logo ---------- */
+.pf-logo-box { display: flex; gap: 14px; align-items: flex-start; margin: 8px 0 4px; }
+.pf-logo-previa {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 96px;
+  height: 96px;
+  flex: none;
+  border: 1.5px dashed var(--brand);
+  border-radius: 16px;
+  background: var(--soft);
+  font-size: 34px;
+  overflow: hidden;
+}
+.pf-logo-previa.com { border-style: solid; border-color: var(--line); background: #fff; }
+.pf-logo-previa img { width: 100%; height: 100%; object-fit: contain; }
+.pf-logo-acoes { flex: 1; min-width: 0; }
+.pf-logo-btn { position: relative; margin: 0 0 10px; justify-content: center; cursor: pointer; }
+.pf-logo-btn:focus-within { outline: 3px solid var(--brand); outline-offset: 2px; }
+.pf-arquivo { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
+.pf-remover { justify-content: center; color: var(--erro); }
+.pf-logo-acoes .campo-ajuda { margin: 0; }
+
+/* ---------- Cores ---------- */
+.pf-cores { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 8px 0; }
+.pf-cor {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 52px;
+  border-radius: 14px;
+  border: 3px solid var(--card);
+  background: var(--pf-c);
+  box-shadow: 0 0 0 1.5px var(--line);
+}
+.pf-cor.on { box-shadow: 0 0 0 3px var(--ink); }
+.pf-cor.on::after { content: "✓"; color: #fff; font-size: 22px; font-weight: 800; }
+.pf-cor-livre {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: var(--toque);
+  margin: 4px 0 6px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.pf-cor-livre input { width: 56px; min-height: 44px; height: 44px; padding: 2px; border-radius: 10px; cursor: pointer; }
+.pf-cor-livre.on span { color: var(--brand); }
+
+/* ---------- Modelos de PDF (miniaturas em CSS) ---------- */
+.pf-modelos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 8px 0 4px; }
+.pf-modelo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 6px;
+  border: 2px solid var(--line);
+  border-radius: 14px;
+  background: var(--card);
+  text-align: center;
+}
+.pf-modelo.on { border-color: var(--brand); background: var(--soft); }
+.pf-modelo b { font-size: 15px; }
+.pf-modelo small { font-size: 11.5px; color: var(--muted); line-height: 1.25; }
+.pf-mini {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 62px;
+  height: 84px;
+  margin-bottom: 6px;
+  padding: 7px 6px;
+  border-radius: 4px;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .25);
+  overflow: hidden;
+}
+.pf-mini i { display: block; height: 4px; border-radius: 2px; background: #d5dae4; }
+.pf-mini .a { height: 8px; width: 60%; background: #3a4255; }
+.pf-mini .b { height: 2px; background: #3a4255; margin-bottom: 4px; }
+.pf-mini .c { width: 90%; }
+.pf-mini .d { margin-top: auto; height: 8px; width: 50%; align-self: flex-end; background: #3a4255; }
+/* Moderno: faixa larga na cor do pintor */
+.pf-mini-moderno { padding-top: 0; }
+.pf-mini-moderno .a { width: auto; height: 18px; margin: 0 -6px 4px; border-radius: 0; background: var(--pf-c); }
+.pf-mini-moderno .b { display: none; }
+.pf-mini-moderno .d { background: var(--pf-c); }
+/* Premium: moldura dourada e título centralizado */
+.pf-mini-premium { border: 2px solid #b8913a; outline: 1px solid #b8913a; outline-offset: -5px; }
+.pf-mini-premium .a { align-self: center; width: 50%; background: #1f2433; }
+.pf-mini-premium .b { background: #b8913a; width: 70%; align-self: center; }
+.pf-mini-premium .d { background: #b8913a; }
+
+/* ---------- Campos ---------- */
+.pf-texto-curto { min-height: 76px; }
+.pf-erro { border-color: var(--erro); background: var(--erro-soft); }
+.pf-plano { margin: 10px 0 0; font-size: 13px; text-align: center; }
+
+/* ---------- Guia (primeira entrada) ---------- */
+.pf-pular-tudo { margin-left: auto; }
+.pf-tela .top .dots { margin-left: 0; }
+.pf-passo { margin: 8px 0 0; font-size: 13px; font-weight: 650; }
+.pf-guia-corpo { margin: 8px 0 22px; }
+.pf-pular { justify-content: center; color: var(--muted); }
+
+/* Botão Salvar fixo */
+.pf-barra .big:disabled { opacity: .6; }
+
+@media (prefers-reduced-motion: reduce) {
+  .pf-sum::after { transition: none; }
+}
