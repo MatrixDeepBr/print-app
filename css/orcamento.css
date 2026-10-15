@@ -1,0 +1,264 @@
+/*
+  Arquivo: css/orcamento.css
+  Versão: 1.0.0
+  Sessão: 6 — Orçamento e histórico
+  Data: 15/10/2026
+  Visual das telas Orçamento (#orcamento) e Histórico (#historico).
+  Carregado pelo app.js antes de montar as duas telas.
+  Usa os componentes e tokens do style.css (.chip, .line, .seg, .bar, .fab, .ov…).
+  Classes com prefixo .orc-, sem ID e sem !important.
+*/
+
+/* ---------- Tela do orçamento ---------- */
+.orc-tela { padding-bottom: 190px; }          /* espaço para a barra e o balão */
+.orc-mt { margin-top: 14px; }
+.orc-pre { white-space: pre-wrap; word-break: break-word; margin: 4px 0 8px; }
+.orc-sub { font-size: 15px; color: var(--muted); margin: 18px 0 8px; }
+
+/* Cabeçalho: voltar, número, "Salvo" e bolinhas */
+.orc-top { min-height: var(--toque); }
+.orc-num { font-weight: 700; font-size: 14px; color: var(--muted); white-space: nowrap; }
+.orc-salvo {
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--ok);
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity .25s;
+}
+.orc-salvo.on { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .orc-salvo { transition: none; } }
+
+/* Busca (cliente e histórico) */
+.orc-busca { position: relative; margin: 12px 0 10px; }
+.orc-busca input { padding-left: 44px; font-size: 17px; }
+.orc-lupa { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); font-size: 17px; opacity: .7; pointer-events: none; }
+
+/* Cliente */
+.orc-cli-atual { border-color: var(--brand); background: var(--soft); }
+.orc-cli-atual b { display: block; font-size: 18px; }
+.orc-cli-atual small { display: block; }
+.big.orc-rapido-btn { border-style: dashed; border-color: var(--brand); color: var(--brand); justify-content: center; }
+.orc-cli-lista { list-style: none; margin: 0; padding: 0; }
+.orc-cli-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 64px;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  background: var(--card);
+  text-align: left;
+}
+.orc-cli-item:hover { border-color: var(--brand); }
+.orc-cli-item.on { border-color: var(--brand); background: var(--soft); }
+.orc-av {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--soft);
+  color: var(--brand);
+  font-weight: 800;
+  font-size: 18px;
+}
+.orc-cli-txt { flex: 1; min-width: 0; }
+.orc-cli-txt b, .orc-cli-txt small { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.orc-cli-txt b { font-size: 16px; }
+.orc-cli-txt small { font-size: 13px; color: var(--muted); }
+.orc-seta { font-size: 24px; color: var(--muted); flex: none; }
+
+/* Áreas */
+.orc-area-ic { font-size: 32px; flex: none; }
+
+/* Serviços e conferência */
+.two.orc-sem-pad { padding: 0; }
+.two.orc-um { grid-template-columns: 1fr; }
+.orc-fech-card { padding-top: 6px; }
+.orc-fech-card label { font-size: 13px; }
+.orc-line { display: flex; }
+.orc-line-c { flex: 1; min-width: 0; }
+.orc-line .h b { padding-left: 12px; overflow-wrap: anywhere; }
+.orc-pad { padding: 0 12px; }
+.orc-pad .seg { margin: 6px 0 2px; }
+.orc-lt { font-size: 17px; white-space: nowrap; margin-left: auto; }
+.orc-fase-vazia .big { justify-content: center; margin: 8px 0 0; }
+.orc-obs-card { padding: 12px; margin-top: 12px; }
+
+/* Resumo */
+.orc-opcoes { display: grid; grid-template-columns: 1fr; gap: 0 12px; margin: 6px 0 14px; }
+.orc-opcoes .rotulo { display: block; margin: 8px 0 0; }
+.orc-validade label { margin-top: 4px; }
+@media (min-width: 560px) { .orc-opcoes { grid-template-columns: 1fr 140px; align-items: end; } }
+.orc-acoes { margin-top: 16px; }
+.orc-acoes .big { justify-content: center; }
+
+/* Desfazer (aparece acima da barra, por alguns segundos) */
+.orc-desfazer {
+  position: fixed;
+  left: calc(var(--side-w) + 16px);
+  right: 16px;
+  bottom: calc(var(--nav-h) + 152px);
+  z-index: 7;
+  max-width: 448px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 4px 4px 16px;
+  border-radius: 14px;
+  background: var(--ink);
+  color: var(--bg);
+  font-size: 14px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .3);
+}
+.orc-desfazer span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.orc-desfazer button {
+  flex: none;
+  min-height: var(--toque);
+  padding: 0 16px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: var(--star);
+  font-weight: 800;
+}
+
+/* ---------- Prévia do orçamento (papel, igual ao protótipo) ---------- */
+.orc-paper {
+  --orc-cor: #2447d6;
+  background: #fff;
+  color: #1b1b1b;
+  border-radius: 6px;
+  padding: 18px;
+  border: 1px solid #d7d7d7;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, .12);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.orc-paper table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+.orc-paper td, .orc-paper th { padding: 6px 4px; border-bottom: 1px solid #e5e5e5; text-align: left; vertical-align: top; }
+.orc-paper td:last-child, .orc-paper th:last-child { text-align: right; white-space: nowrap; }
+.orc-ph { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.orc-logo {
+  width: 120px;
+  height: 46px;
+  flex: none;
+  border: 2px dashed #aab;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #889;
+  font-weight: 700;
+  font-size: 12px;
+}
+.orc-logo:has(img) { border: 0; height: auto; max-height: 70px; }
+.orc-logo img { max-width: 100%; max-height: 70px; object-fit: contain; display: block; }
+.orc-pt { text-align: right; }
+.orc-ptitle { font-size: 24px; font-weight: 800; line-height: 1.1; }
+.orc-pmeta { font-size: 12px; margin-top: 6px; line-height: 1.5; }
+.orc-pemp { margin-top: 12px; font-size: 13px; line-height: 1.4; }
+.orc-pemp b, .orc-pemp span { display: block; }
+.orc-pa { margin: 18px 0 0; }
+.orc-pmu { opacity: .7; text-align: right; }
+.orc-total { font-size: 20px; font-weight: 800; text-align: right; }
+.orc-pobs { margin-top: 14px; border-top: 1px solid rgba(128, 128, 128, .4); padding-top: 10px; }
+.orc-pf { margin-top: 20px; font-size: 12px; text-align: center; opacity: .65; }
+
+/* Clássico: serifa e azul-marinho */
+.orc-m-classico { font-family: Georgia, "Times New Roman", serif; }
+.orc-m-classico .orc-ph { flex-direction: column; align-items: center; border-bottom: 3px double #1c2b5a; padding-bottom: 14px; }
+.orc-m-classico .orc-pt { text-align: center; }
+.orc-m-classico .orc-ptitle { font-weight: 400; font-size: 28px; letter-spacing: .05em; color: #1c2b5a; }
+.orc-m-classico th { color: #1c2b5a; border-bottom: 2px solid #1c2b5a; }
+.orc-m-classico .orc-total { border-top: 2px solid #1c2b5a; padding-top: 8px; color: #1c2b5a; }
+
+/* Moderno: faixa na cor do pintor (azul se não tiver) e total em destaque */
+.orc-m-moderno .orc-ph { background: var(--orc-cor); color: #fff; margin: -18px -18px 6px; padding: 20px 18px; border-radius: 6px 6px 0 0; align-items: center; }
+.orc-m-moderno .orc-logo { border-color: rgba(255, 255, 255, .75); color: #fff; }
+.orc-m-moderno .orc-logo:has(img) { background: #fff; border-radius: 6px; padding: 4px; }
+.orc-m-moderno .orc-ptitle { font-size: 28px; }
+.orc-m-moderno th { color: var(--orc-cor); border-bottom: 2px solid var(--orc-cor); }
+.orc-m-moderno tr:nth-child(even) td { background: #f1f4fc; }
+.orc-m-moderno .orc-total { background: var(--orc-cor); color: #fff; padding: 10px 14px; border-radius: 8px; }
+
+/* Premium: fundo escuro com dourado */
+.orc-m-premium { background: #1d1d1f; color: #f0ece2; border-color: #1d1d1f; }
+.orc-m-premium .orc-ph { border-bottom: 1px solid #c9a24b; padding-bottom: 16px; align-items: center; }
+.orc-m-premium .orc-logo { border-color: #c9a24b; color: #c9a24b; }
+.orc-m-premium .orc-logo:has(img) { background: #fff; border-radius: 6px; padding: 4px; }
+.orc-m-premium .orc-ptitle { color: #c9a24b; font-weight: 300; font-size: 28px; letter-spacing: .14em; }
+.orc-m-premium th { color: #c9a24b; border-bottom: 1px solid #c9a24b; }
+.orc-m-premium td { border-bottom: 1px solid #3a3a3d; }
+.orc-m-premium .orc-total { color: #c9a24b; font-size: 24px; border-top: 1px solid #c9a24b; padding-top: 10px; }
+
+/* ---------- Histórico ---------- */
+.tela.orc-hist-tela { max-width: 760px; }
+.orc-hist-cab { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.orc-hist-cab .muted { font-size: 14px; white-space: nowrap; }
+.orc-filtros { margin: 4px 0 14px; }
+.orc-filtros button small { font-weight: 500; opacity: .75; }
+.orc-filtros button.on, .orc-h-status button.on { background: var(--brand); border-color: var(--brand); color: var(--onbrand); }
+
+.orc-h-lista { list-style: none; margin: 4px 0 0; padding: 0; }
+.orc-h-item {
+  display: flex;
+  align-items: stretch;
+  margin-bottom: 8px;
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  background: var(--card);
+  overflow: hidden;
+}
+.orc-h-item:hover { border-color: var(--brand); }
+.orc-h-abrir {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 68px;
+  padding: 8px 12px;
+  border: 0;
+  background: none;
+  text-align: left;
+}
+.orc-h-txt { flex: 1; min-width: 0; }
+.orc-h-txt b, .orc-h-txt small { display: block; overflow: hidden; text-overflow: ellipsis; }
+.orc-h-txt b { white-space: nowrap; }
+.orc-h-txt b { font-size: 16px; }
+.orc-h-txt small { font-size: 13px; color: var(--muted); }
+.orc-h-txt em { font-style: normal; color: var(--star); font-weight: 650; }
+.orc-h-dir { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex: none; }
+.orc-h-dir b { font-size: 16px; white-space: nowrap; }
+.orc-h-mais {
+  flex: none;
+  width: 52px;
+  border: 0;
+  border-left: 1.5px solid var(--line);
+  background: var(--soft);
+  color: var(--brand);
+  font-size: 22px;
+  font-weight: 800;
+}
+
+/* Selo de status */
+.orc-st { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 20px; font-size: 12px; font-weight: 650; white-space: nowrap; background: var(--soft); color: var(--muted); }
+.orc-st-enviado { color: var(--brand); }
+.orc-st-aprovado { background: var(--ok-soft); color: var(--ok); }
+.orc-st-recusado { background: var(--erro-soft); color: var(--erro); }
+
+/* Folha de ações */
+.orc-h-tit { margin: 4px 0 6px; font-size: 19px; }
+.orc-h-folha .big { justify-content: center; }
+.orc-h-folha .rotulo { display: block; margin: 8px 0 0; }
+.orc-h-status { margin: 8px 0 16px; }
+.big.orc-excluir { color: var(--erro); }
+.big.orc-perigo { background: var(--erro); border-color: var(--erro); color: #fff; }
